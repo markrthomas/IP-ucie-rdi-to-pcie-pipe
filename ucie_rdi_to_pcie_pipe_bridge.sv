@@ -1,0 +1,1 @@
+timescale 1ns/1ps module ucie_rdi_to_pcie_pipe_bridge - complete RTL design with CRC32 support, dual clock domain crossing using Gray code synchronization, elastic buffering, and per-lane error handling
