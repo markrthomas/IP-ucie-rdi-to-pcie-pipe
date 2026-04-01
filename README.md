@@ -39,21 +39,21 @@ IP-ucie-rdi-to-pcie-pipe/
 ┌─────────────────────────────────────────────────────────────────┐
 │                    UCIe RDI -> PIPE Bridge                      │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  RDI Clock Domain          CDC Crossing       PIPE Clock Domain  │
-│       100 MHz                                        150 MHz      │
-│         |                                              |          │
-│    [INPUT]                                         [OUTPUT]      │
-│      |                                               |            │
-│  ┌─────────┐    ┌──────────────┐    ┌──────────┐               │
-│  │ Elastic │    │ Gray Code    │    │ Reg Out  │               │
-│  │  FIFO   ├──→ │ Synchronizer ├──→ │  Stage   ├──→ [PIPE Out] │
-│  │ (16-ent)│    │ (2-flop)     │    │  [CRC]   │               │
-│  └─────────┘    └──────────────┘    └──────────┘               │
+│                                                                 │
+│  RDI Clock Domain          CDC Crossing       PIPE Clock Domain │
+│       100 MHz                                        150 MHz    │
+│         |                                              |        │
+│    [INPUT]                                         [OUTPUT]     │
+│      |                                               |          │
+│  ┌─────────┐    ┌──────────────┐    ┌──────────┐                │
+│  │ Elastic │    │ Gray Code    │    │ Reg Out  │                │
+│  │  FIFO   ├──→ │ Synchronizer ├──→ │  Stage   ├──→ [PIPE Out]  │
+│  │ (16-ent)│    │ (2-flop)     │    │  [CRC]   │                │
+│  └─────────┘    └──────────────┘    └──────────┘                │
 │      |                                      |                   │
-│  [FLOW CTL] ←────────────────────── [READY]                    │
-│   (per lane)                         (synced)                    │
-│                                                                   │
+│  [FLOW CTL] ←────────────────────── [READY]                     │
+│   (per lane)                         (synced)                   │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 
 Per-Lane Data Path (Replicated for 4 Lanes):
