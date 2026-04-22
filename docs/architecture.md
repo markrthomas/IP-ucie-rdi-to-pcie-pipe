@@ -18,9 +18,9 @@ The bridge manages two independent clock domains:
    - Ready output indicates buffer availability
 
 2. **CDC Synchronization** (Async)
-   - Gray-coded write pointer synchronized via double-flop
-   - 2-cycle metastability hardening
-   - No combinational paths across domains
+   - Gray-coded **write** pointer (RDI → PIPE) synchronized via double flops on `pipe_clk`
+   - Gray-coded **read** pointer (PIPE → RDI) synchronized via double flops on `rdi_clk`, converted to binary for **full** / `rdi_ready` on the writer side
+   - No combinational data paths across domains (pointer synchronization only)
 
 3. **PIPE Output Stage** (PIPE CLK)
    - Data multiplexed from synchronized pointer

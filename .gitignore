@@ -1,0 +1,13 @@
+obj_dir/
+*.vcd
+simv
+simv.daidir/
+csrc/
+DVEdir/
+coverage.db
+work/
+*.ucdb
+xsim.dir/
+transcript
+xsim_*.log
+.codex

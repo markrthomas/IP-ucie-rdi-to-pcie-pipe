@@ -59,7 +59,6 @@ All signals are in PIPE clock domain (150 MHz typical).
 
 ### CRC Operation
 - Enable CRC32 computation with `crc_enable`
-- CRC computed on output word
-- Result available with output valid signal
-- Error flag asserts when CRC residue != 0x1704_7432
+- CRC is updated on PIPE clock when `crc_enable` and output-side activity apply (see RTL)
+- **Note:** The current RTL uses a **demo** residue check (`0x1704_7432`) against a running CRC register, not a full PCIe packet CRC contract. Replace with protocol-specific checking for production use.
 
