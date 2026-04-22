@@ -19,11 +19,14 @@ A production-grade SystemVerilog hardware bridge that converts UCIe 1.0 RDI (Red
 
 ```
 IP-ucie-rdi-to-pcie-pipe/
-├── ucie_rdi_to_pcie_pipe_bridge.sv              # Main RTL design with CRC
-├── ucie_rdi_to_pcie_pipe_bridge_assertions.sv   # CDC assertions and coverage
-├── tb_ucie_rdi_to_pcie_pipe_bridge.sv           # Comprehensive testbench
+├── src/
+│   └── ucie_rdi_to_pcie_pipe_bridge.sv          # Main RTL design with CRC
+├── test/
+│   ├── ucie_rdi_to_pcie_pipe_bridge_assertions.sv # CDC assertions and coverage
+│   ├── tb_ucie_rdi_to_pcie_pipe_bridge.sv       # Comprehensive testbench
+│   └── sim_top.sv                               # Optional wrapper for VCS/Questa/Xcelium (#-based clocks)
 ├── sim_main.cpp                                  # Verilator C++ top (clocks + reset; Verilator 4 ignores # delays in SV)
-├── sim_top.sv                                    # Optional wrapper for VCS/Questa/Xcelium (#-based clocks)
+├── doc/                                          # Layout consistency directory
 ├── Makefile                                      # Multi-simulator support
 ├── README.md                                     # This file
 ├── LICENSE                                       # MIT License
@@ -200,10 +203,10 @@ xmsim tb_ucie_rdi_to_pcie_pipe_bridge
 
 1. Create new RTL project
 2. Add source files:
-   - `ucie_rdi_to_pcie_pipe_bridge.sv`
-   - `ucie_rdi_to_pcie_pipe_bridge_assertions.sv` (optional, for simulation)
-   - `tb_ucie_rdi_to_pcie_pipe_bridge.sv`
-   - `sim_top.sv` (simulation top — instantiates the testbench with internal clocks)
+  - `src/ucie_rdi_to_pcie_pipe_bridge.sv`
+  - `test/ucie_rdi_to_pcie_pipe_bridge_assertions.sv` (optional, for simulation)
+  - `test/tb_ucie_rdi_to_pcie_pipe_bridge.sv`
+  - `test/sim_top.sv` (simulation top — instantiates the testbench with internal clocks)
 3. Set simulation top to `sim_top` → Run Behavioral Simulation
 
 ## Test Coverage
