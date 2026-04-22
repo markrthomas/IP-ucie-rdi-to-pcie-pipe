@@ -48,7 +48,7 @@ module ucie_rdi_to_pcie_pipe_bridge_assertions #(
     generate
         for (genvar i = 0; i < NUM_LANES; i++) begin : RDI_STABILITY
             always @(posedge rdi_clk) begin
-                if (rst_n && rdi_valid[i]) begin
+                if (rst_n && rdi_valid[i] && rdi_valid_d1[i]) begin
                     // Data should remain stable during valid assertion
                     if (rdi_data[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH] != rdi_data_d1[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH]) begin
                         $warning("[CDC_WARNING] RDI Lane %0d data changed while valid", i);
@@ -129,4 +129,3 @@ module ucie_rdi_to_pcie_pipe_bridge_assertions #(
     endtask
 
 endmodule
-

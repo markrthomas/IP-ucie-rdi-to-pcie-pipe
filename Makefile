@@ -1,10 +1,15 @@
 
-.PHONY: clean verilator simv xsim questa
+.PHONY: clean verilator verilator_debug simv xsim questa wave lint help
 
-# Variables
-VERILOG_FILES = ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge_assertions.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
+VERILATOR ?= $(shell command -v verilator_bin 2>/dev/null || command -v verilator 2>/dev/null)
+VERILATOR_ROOT := $(shell if [ -n "$(VERILATOR)" ]; then realpath "$$(dirname "$(VERILATOR)")/../share/verilator"; fi)
+VERILATOR_INC := $(VERILATOR_ROOT)/include
+
+VERILOG_RTL = ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge_assertions.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
+VERILOG_FILES = $(VERILOG_RTL)
 TOP_MODULE = tb_ucie_rdi_to_pcie_pipe_bridge
-SIM_TIME = 10ms
+TOP_SIMV = sim_top
+VERILOG_SIMV = sim_top.sv $(VERILOG_RTL)
 VERILATOR_DIR = obj_dir
 
 # Default target
@@ -13,20 +18,30 @@ all: verilator
 # Verilator Simulation
 verilator:
 	@echo "========== Compiling with Verilator =========="
-	verilator --trace -cc $(VERILOG_FILES) --top-module $(TOP_MODULE) -Wno-INFINITELOOP -Wno-STMTDLY -Wno-WIDTH
-	cd obj_dir && make -f Vtb_ucie_rdi_to_pcie_pipe_bridge.mk
-	cd obj_dir && g++ -o Vtb_ucie_rdi_to_pcie_pipe_bridge ../sim_main.cpp Vtb_ucie_rdi_to_pcie_pipe_bridge__ALL.a -I. -I/usr/share/verilator/include -I/usr/share/verilator/include/vltstd /usr/share/verilator/include/verilated.cpp /usr/share/verilator/include/verilated_vcd_c.cpp -lm
-	@echo "Running Verilator simulation..."
-	./obj_dir/Vtb_ucie_rdi_to_pcie_pipe_bridge
-
-# Verilator with detailed tracing
-verilator_debug:
-	@echo "========== Compiling with Verilator (Debug Mode) =========="
-	verilator --trace --trace-fst -cc $(VERILOG_FILES) --top-module $(TOP_MODULE)
+	@if [ -z "$(VERILATOR)" ] || [ -z "$(VERILATOR_ROOT)" ]; then echo "ERROR: install verilator or ensure verilator_bin is on PATH"; exit 1; fi
+	$(VERILATOR) --trace -cc $(VERILOG_FILES) --top-module $(TOP_MODULE) -Wno-INFINITELOOP -Wno-STMTDLY -Wno-WIDTH
 	cd $(VERILATOR_DIR) && make -f V$(TOP_MODULE).mk
-	./$(VERILATOR_DIR)/V$(TOP_MODULE)
+	cd $(VERILATOR_DIR) && g++ -o $(TOP_MODULE) ../sim_main.cpp V$(TOP_MODULE)__ALL.a \
+		-I. -I$(VERILATOR_INC) -I$(VERILATOR_INC)/vltstd \
+		$(VERILATOR_INC)/verilated.cpp $(VERILATOR_INC)/verilated_vcd_c.cpp \
+		$(VERILATOR_INC)/verilated_threads.cpp -pthread -lm
+	@echo "Running Verilator simulation..."
+	./$(VERILATOR_DIR)/$(TOP_MODULE)
 
-# View Waveforms (requires GTKWave)
+# Same as verilator with debug-friendly C++ flags
+verilator_debug:
+	@echo "========== Compiling with Verilator (debug) =========="
+	@if [ -z "$(VERILATOR)" ] || [ -z "$(VERILATOR_ROOT)" ]; then echo "ERROR: install verilator or ensure verilator_bin is on PATH"; exit 1; fi
+	$(VERILATOR) --trace -cc $(VERILOG_FILES) --top-module $(TOP_MODULE) -Wno-INFINITELOOP -Wno-STMTDLY -Wno-WIDTH
+	cd $(VERILATOR_DIR) && make -f V$(TOP_MODULE).mk
+	cd $(VERILATOR_DIR) && g++ -g -O0 -o $(TOP_MODULE) ../sim_main.cpp V$(TOP_MODULE)__ALL.a \
+		-I. -I$(VERILATOR_INC) -I$(VERILATOR_INC)/vltstd \
+		$(VERILATOR_INC)/verilated.cpp $(VERILATOR_INC)/verilated_vcd_c.cpp \
+		$(VERILATOR_INC)/verilated_threads.cpp -pthread -lm
+	@echo "Running Verilator simulation..."
+	./$(VERILATOR_DIR)/$(TOP_MODULE)
+
+# View waveforms (GTKWave; VCD from sim_main.cpp)
 wave:
 	@echo "Opening GTKWave..."
 	gtkwave $(VERILATOR_DIR)/dump.vcd &
@@ -34,27 +49,31 @@ wave:
 # VCS Simulation (requires Synopsys VCS)
 simv:
 	@echo "========== Compiling with VCS =========="
-	vcs -sverilog -debug_all -cm line+tgl $(VERILOG_FILES)
+	vcs -sverilog -debug_all -cm line+tgl -top $(TOP_SIMV) $(VERILOG_SIMV)
 	@echo "Running VCS simulation..."
 	./simv -gui &
 
 # Mentor ModelSim/QuestaSim
 questa:
 	@echo "========== Compiling with QuestaSim =========="
-	vlog -sv $(VERILOG_FILES)
-	vsim -c $(TOP_MODULE) -do "run -all; quit"
+	vlog -sv $(VERILOG_SIMV)
+	vsim -c $(TOP_SIMV) -do "run -all; quit"
 
 # Cadence Xcelium
 xsim:
 	@echo "========== Compiling with Cadence Xcelium =========="
-	xmvlog -sv $(VERILOG_FILES)
-	xmsim $(TOP_MODULE)
+	xmvlog -sv $(VERILOG_SIMV)
+	xmsim $(TOP_SIMV)
 
 # Vivado Simulation (Xilinx)
 vivado:
 	@echo "========== Setting up Vivado Simulation =========="
 	@echo "Note: Add files manually to Vivado project"
 	@echo "Source files: $(VERILOG_FILES)"
+
+lint:
+	@if [ -z "$(VERILATOR)" ]; then echo "ERROR: install verilator or ensure verilator_bin is on PATH"; exit 1; fi
+	$(VERILATOR) --lint-only -Wall ucie_rdi_to_pcie_pipe_bridge.sv 2>&1 | head -80; true
 
 # Clean up simulation artifacts
 clean:
@@ -65,19 +84,17 @@ clean:
 	rm -rf work *.ucdb
 	@echo "Clean complete"
 
-# Help target
 help:
 	@echo "Available targets:"
 	@echo "  make verilator          - Compile and simulate with Verilator (default)"
-	@echo "  make verilator_debug    - Compile with detailed tracing"
-	@echo "  make wave               - Open GTKWave viewer"
-	@echo "  make simv               - Compile and simulate with VCS"
-	@echo "  make questa             - Compile and simulate with QuestaSim"
-	@echo "  make xsim               - Compile and simulate with Xcelium"
-	@echo "  make vivado             - Prepare for Vivado simulation"
-	@echo "  make clean              - Remove all simulation artifacts"
-	@echo "  make help               - Display this help message"
+	@echo "  make verilator_debug    - Verilator with g++ -g -O0"
+	@echo "  make wave               - Open GTKWave on obj_dir/dump.vcd"
+	@echo "  make lint               - Verilator lint on RTL (best-effort)"
+	@echo "  make simv               - VCS"
+	@echo "  make questa             - QuestaSim"
+	@echo "  make xsim               - Xcelium"
+	@echo "  make vivado             - Vivado hints"
+	@echo "  make clean              - Remove build artifacts"
+	@echo "  make help               - This message"
 
 .DEFAULT_GOAL := all
-
-

@@ -24,7 +24,7 @@ module ucie_rdi_to_pcie_pipe_bridge #(
     input  logic                                rst_n,
     input  logic                                rdi_clk,
     input  logic [NUM_LANES-1:0]                rdi_valid,
-    input  logic [NUM_LANES-1:0]                rdi_ready,
+    output logic [NUM_LANES-1:0]                rdi_ready,
     input  logic [NUM_LANES*RDI_DATA_WIDTH-1:0] rdi_data,
     input  logic [NUM_LANES-1:0]                rdi_error,
     output logic [NUM_LANES-1:0]                rdi_flow_ctrl,
@@ -52,7 +52,6 @@ module ucie_rdi_to_pcie_pipe_bridge #(
             assign rdi_lane_data = rdi_data[lane*RDI_DATA_WIDTH +: RDI_DATA_WIDTH];
             assign rdi_lane_valid = rdi_valid[lane];
             assign rdi_lane_error = rdi_error[lane];
-            assign rdi_lane_ready = rdi_ready[lane];
 
             assign pipe_data[lane*PIPE_DATA_WIDTH +: PIPE_DATA_WIDTH] = pipe_lane_data;
             assign pipe_valid[lane] = pipe_lane_valid;
@@ -66,13 +65,10 @@ module ucie_rdi_to_pcie_pipe_bridge #(
             } rdi_entry_t;
 
             rdi_entry_t rdi_buffer [BUFFER_DEPTH];
-            logic [$clog2(BUFFER_DEPTH+1)-1:0] rdi_wr_ptr, rdi_rd_ptr;
-            logic [$clog2(BUFFER_DEPTH+1)-1:0] rdi_wr_ptr_gray, rdi_rd_ptr_gray;
+            logic [$clog2(BUFFER_DEPTH+1)-1:0] rdi_wr_ptr;
+            logic [$clog2(BUFFER_DEPTH+1)-1:0] rdi_wr_ptr_gray;
             logic rdi_buffer_full, rdi_buffer_empty;
 
-            assign rdi_buffer_empty = (rdi_wr_ptr == rdi_rd_ptr);
-            assign rdi_buffer_full = ((rdi_wr_ptr + 1) % (BUFFER_DEPTH + 1)) == rdi_rd_ptr;
-            assign rdi_flow_ctrl[lane] = rdi_buffer_full;
             assign rdi_wr_ptr_gray = rdi_wr_ptr ^ (rdi_wr_ptr >> 1);
 
             always_ff @(posedge rdi_clk or negedge rst_n) begin
@@ -87,9 +83,8 @@ module ucie_rdi_to_pcie_pipe_bridge #(
                 end
             end
 
-            // CDC: Double-flop sync for write pointer
+            // CDC: sync write pointer (gray) into PIPE domain
             logic [$clog2(BUFFER_DEPTH+1)-1:0] rdi_wr_ptr_gray_sync_r1, rdi_wr_ptr_gray_sync;
-            logic [$clog2(BUFFER_DEPTH+1)-1:0] pipe_rd_ptr_gray, pipe_rd_ptr_gray_sync_r1, pipe_rd_ptr_gray_sync;
 
             always_ff @(posedge pipe_clk or negedge rst_n) begin
                 if (!rst_n) begin
@@ -137,7 +132,36 @@ module ucie_rdi_to_pcie_pipe_bridge #(
                 end
             end
 
-            // CRC computation (simplified)
+            // CDC: sync read pointer (gray) into RDI domain for correct full/ready
+            logic [$clog2(BUFFER_DEPTH+1)-1:0] pipe_rd_ptr_gray;
+            assign pipe_rd_ptr_gray = pipe_rd_ptr ^ (pipe_rd_ptr >> 1);
+
+            logic [$clog2(BUFFER_DEPTH+1)-1:0] pipe_rd_ptr_gray_sync_r1_rdi, pipe_rd_ptr_gray_sync_rdi;
+            always_ff @(posedge rdi_clk or negedge rst_n) begin
+                if (!rst_n) begin
+                    pipe_rd_ptr_gray_sync_r1_rdi <= '0;
+                    pipe_rd_ptr_gray_sync_rdi <= '0;
+                end else begin
+                    pipe_rd_ptr_gray_sync_r1_rdi <= pipe_rd_ptr_gray;
+                    pipe_rd_ptr_gray_sync_rdi <= pipe_rd_ptr_gray_sync_r1_rdi;
+                end
+            end
+
+            logic [$clog2(BUFFER_DEPTH+1)-1:0] rdi_sync_rd_ptr;
+            always_comb begin
+                rdi_sync_rd_ptr = pipe_rd_ptr_gray_sync_rdi;
+                for (int i = $clog2(BUFFER_DEPTH+1)-2; i >= 0; i--) begin
+                    rdi_sync_rd_ptr[i] = rdi_sync_rd_ptr[i+1] ^ pipe_rd_ptr_gray_sync_rdi[i];
+                end
+            end
+
+            assign rdi_buffer_empty = (rdi_wr_ptr == rdi_sync_rd_ptr);
+            assign rdi_buffer_full = ((rdi_wr_ptr + 1) % (BUFFER_DEPTH + 1)) == rdi_sync_rd_ptr;
+            assign rdi_flow_ctrl[lane] = rdi_buffer_full;
+            assign rdi_ready[lane] = !rdi_buffer_full;
+            assign rdi_lane_ready = rdi_ready[lane];
+
+            // CRC: placeholder check vs fixed residue (not packet-qualified PCIe CRC)
             logic [31:0] crc_result;
 
             always_ff @(posedge pipe_clk or negedge rst_n) begin
@@ -152,11 +176,15 @@ module ucie_rdi_to_pcie_pipe_bridge #(
 
             assign crc_error[lane] = (crc_result == 32'h1704_7432) ? 1'b0 : (crc_enable[lane] ? 1'b1 : 1'b0);
 
-            function logic [31:0] compute_crc32(logic [PIPE_DATA_WIDTH-1:0] data_in, logic [31:0] crc_in);
+            function automatic logic [31:0] compute_crc32(
+                input logic [PIPE_DATA_WIDTH-1:0] data_in,
+                input logic [31:0] crc_in
+            );
                 logic [31:0] crc_temp;
+                logic fb;
                 crc_temp = crc_in;
                 for (int i = 0; i < PIPE_DATA_WIDTH; i++) begin
-                    logic fb = crc_temp[31] ^ data_in[i];
+                    fb = crc_temp[31] ^ data_in[i];
                     crc_temp = crc_temp << 1;
                     if (fb) crc_temp = crc_temp ^ 32'h04C1_1DB7;
                 end
@@ -167,4 +195,3 @@ module ucie_rdi_to_pcie_pipe_bridge #(
     endgenerate
 
 endmodule
-

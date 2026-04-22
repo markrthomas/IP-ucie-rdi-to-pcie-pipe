@@ -12,7 +12,7 @@ A production-grade SystemVerilog hardware bridge that converts UCIe 1.0 RDI (Red
 ✅ **Flow Control**: Complete ready/valid handshaking with backpressure  
 ✅ **Error Handling**: Per-lane error signals safely synchronized across domains  
 ✅ **Metastability Hardening**: Dual-flop synchronizers and Gray code pointer crossing  
-✅ **SVA Assertions**: Comprehensive CDC verification assertions  
+✅ **Simulation monitors**: CDC-oriented checks and per-lane transfer statistics (`ucie_rdi_to_pcie_pipe_bridge_assertions.sv`)  
 ✅ **Verilator Compatible**: Clean SystemVerilog with no vendor-specific constructs  
 
 ## Project Structure
@@ -22,6 +22,8 @@ IP-ucie-rdi-to-pcie-pipe/
 ├── ucie_rdi_to_pcie_pipe_bridge.sv              # Main RTL design with CRC
 ├── ucie_rdi_to_pcie_pipe_bridge_assertions.sv   # CDC assertions and coverage
 ├── tb_ucie_rdi_to_pcie_pipe_bridge.sv           # Comprehensive testbench
+├── sim_main.cpp                                  # Verilator C++ top (clocks + reset; Verilator 4 ignores # delays in SV)
+├── sim_top.sv                                    # Optional wrapper for VCS/Questa/Xcelium (#-based clocks)
 ├── Makefile                                      # Multi-simulator support
 ├── README.md                                     # This file
 ├── LICENSE                                       # MIT License
@@ -155,6 +157,10 @@ make wave
 
 Output: `obj_dir/dump.vcd` (GTKWave compatible)
 
+If both `verilator` and `verilator_bin` are on your `PATH`, the Makefile prefers `verilator_bin` so the bundled wrapper can provide a consistent `VERILATOR_ROOT` and runtime support files.
+
+**Verilator note:** Release 4.x ignores `#` delays in SystemVerilog. This project drives `rdi_clk`, `pipe_clk`, and `rst_n` from `sim_main.cpp` when using `make verilator`. For VCS/Questa/Xcelium, `make simv` / `make questa` / `make xsim` use top module `sim_top`, which generates clocks with delays in `sim_top.sv`.
+
 ### Synopsys VCS
 
 ```bash
@@ -196,74 +202,23 @@ xmsim tb_ucie_rdi_to_pcie_pipe_bridge
 2. Add source files:
    - `ucie_rdi_to_pcie_pipe_bridge.sv`
    - `ucie_rdi_to_pcie_pipe_bridge_assertions.sv` (optional, for simulation)
-   - `tb_ucie_rdi_to_pcie_pipe_bridge.sv` (as simulation source)
-3. Run Simulation → Run Behavioral Simulation
+   - `tb_ucie_rdi_to_pcie_pipe_bridge.sv`
+   - `sim_top.sv` (simulation top — instantiates the testbench with internal clocks)
+3. Set simulation top to `sim_top` → Run Behavioral Simulation
 
 ## Test Coverage
 
-The comprehensive testbench includes:
+The testbench (`tb_ucie_rdi_to_pcie_pipe_bridge.sv`) is a smoke suite with dual asynchronous clocks (100 MHz RDI / 150 MHz PIPE):
 
-### Test 1: Reset Sequence
-- Verifies proper initialization of all internal state
-- Checks flow control and valid signals post-reset
+1. **Single-lane transfer** — one beat on lane 0  
+2. **Multi-lane transfer** — simultaneous valid on all lanes  
+3. **PIPE backpressure** — `pipe_ready` low then high while pushing data  
+4. **Error flag** — `rdi_error` on one lane  
+5. **Sustained traffic** — repeated multi-lane bursts  
 
-### Test 2: Basic Single Lane Transfer
-- Single lane data transfer validation
-- Ready signal assertion verification
+The **assertion helper module** is instantiated in the testbench. It emits `$warning` on suspect RDI data changes during `valid`, checks PIPE-side stability, and prints **per-lane transfer counts** at end of simulation via `print_statistics()`.
 
-### Test 3: Multi-Lane with Flow Control
-- Simultaneous 4-lane transfers
-- Backpressure handling when PIPE not ready
-- Flow control signal assertion
-
-### Test 4: Sustained Traffic (1000 cycles)
-- Continuous data flow on all lanes
-- Error injection at predetermined cycles
-- Transfer count validation per lane
-
-### Test 5: CRC Functionality
-- Configurable per-lane CRC enable
-- CRC32 polynomial computation
-- CRC error flag generation
-
-### Test 6: Error Propagation
-- RDI error signal injection
-- Cross-domain synchronization verification
-- Error flag propagation to PIPE side
-
-### Test 7: Clock Domain Crossing
-- Stress testing with frequency difference (100 MHz vs 150 MHz)
-- 200-cycle pattern transmission
-- Data integrity verification post-CDC
-
-## SVA Assertions
-
-The design includes comprehensive assertions for:
-
-### CDC Safety
-- Data stability during valid cycles
-- Ready signal proper synchronization
-- No direct combinational cross-domain paths
-- Pointer Gray code validity
-
-### Protocol Compliance
-- Valid/ready handshaking rules
-- Error signal synchronization
-- Output stability when valid
-
-### Coverage Goals
-- Transfer monitoring per lane
-- Error injection coverage
-- Clock domain crossing coverage
-
-Run assertions with:
-```bash
-# VCS with assertions
-vcs -sverilog +define+ASSERT_ON ucie_rdi_to_pcie_pipe_bridge.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
-
-# Verilator with SVA
-verilator --assert -cc ucie_rdi_to_pcie_pipe_bridge.sv
-```
+For vendor simulators, you can add **SVA** or bind additional properties; Verilator uses the procedural checks in `ucie_rdi_to_pcie_pipe_bridge_assertions.sv` by default.
 
 ## Design Highlights
 
@@ -288,10 +243,9 @@ verilator --assert -cc ucie_rdi_to_pcie_pipe_bridge.sv
 - No critical paths across clock domains
 
 ### Verification ✓
-- 7 comprehensive test scenarios
-- SVA assertions for functional correctness
-- Coverage tracking for all signals
-- Error injection capability
+- Smoke tests with dual clocks and backpressure
+- Instantiated CDC monitor (stability checks + transfer statistics)
+- RTL lint via `make lint` (Verilator)
 
 ## Performance Characteristics
 
@@ -343,44 +297,13 @@ verilator --lint-only ucie_rdi_to_pcie_pipe_bridge.sv
 - Check clock frequency ratio (100 MHz : 150 MHz)
 - Validate pointer Gray code transitions
 
-## Simulation Statistics Example
+## Simulation output example
 
-```
-========== UCIe RDI to PCIe PIPE Bridge Testbench ==========
-[TB] Reset released at t=20000
+After `make verilator`, you should see `[TEST]` lines from the testbench plus a **CDC Assertion Statistics** block from `cdc_mon.print_statistics()` (RDI/PIPE transfer counts per lane). Waveforms: `obj_dir/dump.vcd` (e.g. `make wave`).
 
-[TEST 1] Reset Sequence Verification
-  [PASS] RDI flow control deasserted after reset
-  [PASS] PIPE valid deasserted after reset
+## Continuous integration
 
-[TEST 2] Basic Single Lane Transfer
-  [PASS] Lane 0 ready signal asserted
-
-[TEST 3] Multi-lane Transfer with Flow Control
-  [INFO] RDI transfers per lane:
-    Lane 0: 97 transfers
-    Lane 1: 97 transfers
-    Lane 2: 97 transfers
-    Lane 3: 97 transfers
-  [PASS] Flow control signals asserted when PIPE not ready
-
-[TEST 4] Sustained Traffic Pattern (1000 cycles)
-  [INFO] Error injected on Lane 0 at cycle 250
-  [INFO] Error injected on Lane 0 at cycle 500
-  [INFO] Error injected on Lane 0 at cycle 750
-  [INFO] RDI transfers per lane:
-    Lane 0: 997 transfers, 3 errors
-    Lane 1: 997 transfers, 0 errors
-    Lane 2: 997 transfers, 0 errors
-    Lane 3: 997 transfers, 0 errors
-
-[TEST 7] Clock Domain Crossing Verification
-  [INFO] CDC test pattern transmitted and received
-
-========== Test Statistics ==========
-Total Simulation Time: 21000000
-======================================
-```
+GitHub Actions workflow `.github/workflows/verilator.yml` runs `make verilator` on push/PR to `main` or `master`.
 
 ## Documentation Files
 
@@ -400,130 +323,4 @@ Repository: https://github.com/markrthomas/IP-ucie-rdi-to-pcie-pipe
 
 ---
 
-**Note**: This is a production-grade design suitable for implementation in ASICs and FPGAs. All code is synthesizable and follows HDL best practices.
-
-# UCIe RDI to PCIe PIPE Bridge
-
-A high-performance SystemVerilog bridge that converts UCIe 1.0 RDI (Reduced Die-to-Die Interface) signals to PCIe Gen 4 PIPE (Physical Interface) signals.
-
-## Overview
-
-This bridge provides:
-- **Unidirectional conversion** from UCIe RDI to PCIe PIPE protocols
-- **4-lane support** on both interfaces (configurable via parameters)
-- **Dual clock domain** handling with proper synchronization
-- **Elastic buffering** to support frequency variations between RDI and PIPE clock domains
-- **CRC/Error handling** with proper flow control mechanisms
-- **Parameterized design** for flexibility and extensibility
-- **Verilator compatible** for simulation and verification
-
-## Architecture
-
-### Key Components
-
-1. **Per-Lane Elastic Buffers**: Independent FIFO buffers for each of the 4 lanes in the RDI clock domain
-2. **Clock Domain Crossing**: Gray code pointer synchronization between RDI and PIPE clock domains
-3. **Output Buffers**: PIPE clock domain output buffers with ready/valid handshaking
-4. **Flow Control**: Backpressure signaling through `rdi_flow_ctrl` when buffers are full
-5. **Error Propagation**: CRC and error signals are synchronized across clock domains
-
-### Interface Signals
-
-#### UCIe RDI Side (Source)
-- `rdi_clk`: Source clock (100 MHz typical)
-- `rdi_valid[NUM_LANES-1:0]`: Valid data on each lane
-- `rdi_ready[NUM_LANES-1:0]`: Ready to accept data (from bridge)
-- `rdi_data[NUM_LANES*RDI_DATA_WIDTH-1:0]`: 16-bit data per lane
-- `rdi_error[NUM_LANES-1:0]`: Error indicator per lane
-- `rdi_flow_ctrl[NUM_LANES-1:0]`: Flow control (asserted when buffer full)
-
-#### PCIe PIPE Side (Sink)
-- `pipe_clk`: Sink clock (150 MHz typical)
-- `pipe_valid[NUM_LANES-1:0]`: Valid data on each lane
-- `pipe_ready[NUM_LANES-1:0]`: Downstream ready to accept
-- `pipe_data[NUM_LANES*PIPE_DATA_WIDTH-1:0]`: 32-bit data per lane (Gen 4)
-- `pipe_error[NUM_LANES-1:0]`: Error indicator per lane
-
-## File Structure
-
-```
-IP-ucie-rdi-to-pcie-pipe/
-├── ucie_rdi_to_pcie_pipe_bridge.sv    # Main bridge RTL
-├── tb_ucie_rdi_to_pcie_pipe_bridge.sv # Testbench
-└── README.md                           # This file
-```
-
-## Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `NUM_LANES` | 4 | Number of parallel lanes |
-| `RDI_DATA_WIDTH` | 16 | UCIe RDI data width per lane (bits) |
-| `PIPE_DATA_WIDTH` | 32 | PCIe PIPE data width per lane (bits) |
-| `BUFFER_DEPTH` | 16 | Elastic buffer depth per lane |
-
-## Running the Testbench
-
-### Prerequisites
-- Verilator (recommended for simulation)
-- SystemVerilog compiler (e.g., Vivado, VCS, QuestaSim)
-
-### Simulation with Verilator
-```bash
-verilator --cc -sv --trace tb_ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge.sv
-cd obj_dir
-make -f Vtb_ucie_rdi_to_pcie_pipe_bridge.mk
-./Vtb_ucie_rdi_to_pcie_pipe_bridge
-```
-
-### Simulation with Other Tools
-```bash
-# Example with Vivado Simulator (xsim)
-xvlog -sv ucie_rdi_to_pcie_pipe_bridge.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
-xelab tb_ucie_rdi_to_pcie_pipe_bridge
-xsim tb_ucie_rdi_to_pcie_pipe_bridge -gui
-```
-
-## Testbench Features
-
-The basic testbench (`tb_ucie_rdi_to_pcie_pipe_bridge.sv`) includes:
-
-1. **Dual Clock Generation**: Separate clocks for RDI (100 MHz) and PIPE (150 MHz)
-2. **Test 1 - Basic Data Transfer**: Sends data on all 4 lanes with proper handshaking
-3. **Test 2 - Flow Control**: Tests backpressure by deasserting PIPE ready and injecting errors
-4. **Test 3 - Sustained Traffic**: Exercises the bridge with continuous data transfers
-5. **Monitoring**: Real-time reporting of transfers and debug information
-
-## Design Highlights
-
-### Clock Domain Crossing
-- Gray code pointer synchronization for safe CDC (Clock Domain Crossing)
-- Double-flop synchronizers (2-FF) for metastability hardening
-- Independent synchronization paths for read and write pointers
-
-### Flow Control
-- Ready/valid handshaking on both interfaces
-- `rdi_flow_ctrl` asserted when elastic buffer becomes full
-- Automatic backpressure propagation
-
-### Error Handling
-- Per-lane error indicators
-- Error signals synchronized across clock domains
-- Errors propagate transparently through the bridge
-
-## Future Enhancements
-
-- [ ] Data width adaptation logic (16-bit to 32-bit conversion with packing)
-- [ ] CRC computation and verification
-- [ ] Performance counters and statistics
-- [ ] Protocol-specific signal mapping (e.g., lane polarity, training signals)
-- [ ] Comprehensive verification test suite
-- [ ] Power and performance analysis
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Author
-
-markrthomas
+**Note**: This RTL is suitable for FPGA/ASIC integration paths with your own timing and protocol validation. Run `make verilator` and `make lint` before tape-in.
