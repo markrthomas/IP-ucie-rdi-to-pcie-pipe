@@ -5,11 +5,11 @@ VERILATOR ?= $(shell command -v verilator_bin 2>/dev/null || command -v verilato
 VERILATOR_ROOT := $(shell if [ -n "$(VERILATOR)" ]; then realpath "$$(dirname "$(VERILATOR)")/../share/verilator"; fi)
 VERILATOR_INC := $(VERILATOR_ROOT)/include
 
-VERILOG_RTL = src/ucie_rdi_to_pcie_pipe_bridge.sv test/ucie_rdi_to_pcie_pipe_bridge_assertions.sv test/tb_ucie_rdi_to_pcie_pipe_bridge.sv
+VERILOG_RTL = ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge_assertions.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
 VERILOG_FILES = $(VERILOG_RTL)
 TOP_MODULE = tb_ucie_rdi_to_pcie_pipe_bridge
 TOP_SIMV = sim_top
-VERILOG_SIMV = test/sim_top.sv $(VERILOG_RTL)
+VERILOG_SIMV = sim_top.sv $(VERILOG_RTL)
 VERILATOR_DIR = obj_dir
 
 # Default target
@@ -73,7 +73,7 @@ vivado:
 
 lint:
 	@if [ -z "$(VERILATOR)" ]; then echo "ERROR: install verilator or ensure verilator_bin is on PATH"; exit 1; fi
-	$(VERILATOR) --lint-only -Wall src/ucie_rdi_to_pcie_pipe_bridge.sv 2>&1 | head -80; true
+	$(VERILATOR) --lint-only -Wall ucie_rdi_to_pcie_pipe_bridge.sv 2>&1 | head -80; true
 
 # Clean up simulation artifacts
 clean:
