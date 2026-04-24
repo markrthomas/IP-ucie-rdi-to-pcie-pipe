@@ -67,9 +67,19 @@ module ucie_rdi_to_pcie_pipe_bridge #(
             rdi_entry_t rdi_buffer [BUFFER_DEPTH];
             logic [$clog2(BUFFER_DEPTH+1)-1:0] rdi_wr_ptr;
             logic [$clog2(BUFFER_DEPTH+1)-1:0] rdi_wr_ptr_gray;
-            logic rdi_buffer_full, rdi_buffer_empty;
+            logic rdi_buffer_full;
+            logic [$clog2(BUFFER_DEPTH+1)-1:0] rdi_wr_ptr_next;
+            localparam [$clog2(BUFFER_DEPTH+1)-1:0] RDI_PTR_MAX = BUFFER_DEPTH[$clog2(BUFFER_DEPTH+1)-1:0];
+            localparam [$clog2(BUFFER_DEPTH+1)-1:0] RDI_PTR_ONE = 1;
 
             assign rdi_wr_ptr_gray = rdi_wr_ptr ^ (rdi_wr_ptr >> 1);
+
+            always_comb begin
+                if (rdi_wr_ptr == RDI_PTR_MAX)
+                    rdi_wr_ptr_next = '0;
+                else
+                    rdi_wr_ptr_next = rdi_wr_ptr + RDI_PTR_ONE;
+            end
 
             always_ff @(posedge rdi_clk or negedge rst_n) begin
                 if (!rst_n) begin
@@ -79,7 +89,7 @@ module ucie_rdi_to_pcie_pipe_bridge #(
                         data: rdi_lane_data,
                         error: rdi_lane_error
                     };
-                    rdi_wr_ptr <= (rdi_wr_ptr + 1) % (BUFFER_DEPTH + 1);
+                    rdi_wr_ptr <= rdi_wr_ptr_next;
                 end
             end
 
@@ -99,6 +109,16 @@ module ucie_rdi_to_pcie_pipe_bridge #(
             // PIPE clock domain: Read from buffer
             logic [$clog2(BUFFER_DEPTH+1)-1:0] pipe_wr_ptr, pipe_rd_ptr;
             logic pipe_buffer_empty;
+            logic [$clog2(BUFFER_DEPTH+1)-1:0] pipe_rd_ptr_next;
+            localparam [$clog2(BUFFER_DEPTH+1)-1:0] PIPE_PTR_MAX = BUFFER_DEPTH[$clog2(BUFFER_DEPTH+1)-1:0];
+            localparam [$clog2(BUFFER_DEPTH+1)-1:0] PIPE_PTR_ONE = 1;
+
+            always_comb begin
+                if (pipe_rd_ptr == PIPE_PTR_MAX)
+                    pipe_rd_ptr_next = '0;
+                else
+                    pipe_rd_ptr_next = pipe_rd_ptr + PIPE_PTR_ONE;
+            end
 
             always_comb begin
                 pipe_wr_ptr = rdi_wr_ptr_gray_sync;
@@ -123,7 +143,7 @@ module ucie_rdi_to_pcie_pipe_bridge #(
                     pipe_lane_data <= '0;
                     pipe_lane_error <= '0;
                 end else if (pipe_lane_valid && pipe_lane_ready) begin
-                    pipe_rd_ptr <= (pipe_rd_ptr + 1) % (BUFFER_DEPTH + 1);
+                    pipe_rd_ptr <= pipe_rd_ptr_next;
                     pipe_lane_data <= pipe_data_mux;
                     pipe_lane_error <= pipe_error_mux;
                 end else if (pipe_lane_valid) begin
@@ -155,8 +175,7 @@ module ucie_rdi_to_pcie_pipe_bridge #(
                 end
             end
 
-            assign rdi_buffer_empty = (rdi_wr_ptr == rdi_sync_rd_ptr);
-            assign rdi_buffer_full = ((rdi_wr_ptr + 1) % (BUFFER_DEPTH + 1)) == rdi_sync_rd_ptr;
+            assign rdi_buffer_full = (rdi_wr_ptr_next == rdi_sync_rd_ptr);
             assign rdi_flow_ctrl[lane] = rdi_buffer_full;
             assign rdi_ready[lane] = !rdi_buffer_full;
             assign rdi_lane_ready = rdi_ready[lane];
