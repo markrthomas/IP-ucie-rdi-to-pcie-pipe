@@ -19,22 +19,28 @@ A production-grade SystemVerilog hardware bridge that converts UCIe 1.0 RDI (Red
 
 ```
 IP-ucie-rdi-to-pcie-pipe/
+├── ucie_rdi_to_pcie_pipe_bridge.sv          # Canonical RTL (main design + CRC)
+├── ucie_rdi_to_pcie_pipe_bridge_assertions.sv # CDC monitors and transfer statistics
+├── tb_ucie_rdi_to_pcie_pipe_bridge.sv       # Testbench
+├── sim_top.sv                               # Sim top for VCS/Questa/Xcelium (#-based clocks)
+├── sim_main.cpp                             # Verilator C++ top (clocks + reset)
 ├── src/
-│   └── ucie_rdi_to_pcie_pipe_bridge.sv          # Main RTL design with CRC
+│   └── ucie_rdi_to_pcie_pipe_bridge.sv     # Thin `include wrapper (EDA project convention)
 ├── test/
-│   ├── ucie_rdi_to_pcie_pipe_bridge_assertions.sv # CDC assertions and coverage
-│   ├── tb_ucie_rdi_to_pcie_pipe_bridge.sv       # Comprehensive testbench
-│   └── sim_top.sv                               # Optional wrapper for VCS/Questa/Xcelium (#-based clocks)
-├── sim_main.cpp                                  # Verilator C++ top (clocks + reset; Verilator 4 ignores # delays in SV)
-├── doc/                                          # Layout consistency directory
-├── Makefile                                      # Multi-simulator support
-├── README.md                                     # This file
-├── LICENSE                                       # MIT License
+│   ├── ucie_rdi_to_pcie_pipe_bridge_assertions.sv # Thin `include wrapper
+│   ├── tb_ucie_rdi_to_pcie_pipe_bridge.sv         # Thin `include wrapper
+│   └── sim_top.sv                                 # Thin `include wrapper
+├── doc/                                     # Layout consistency directory
+├── Makefile                                 # Multi-simulator support (uses root files)
+├── README.md                                # This file
+├── LICENSE                                  # MIT License
 └── docs/
-    ├── architecture.md                           # Detailed design documentation
-    ├── interface_spec.md                         # Signal specifications
-    └── verification_plan.md                      # Test and assertion strategy
+    ├── architecture.md                      # Detailed design documentation
+    ├── interface_spec.md                    # Signal specifications
+    └── verification_plan.md                 # Test and assertion strategy
 ```
+
+> **Note:** `make verilator`, `make lint`, and `make verilator_debug` compile the root-level `.sv` files directly. The `src/` and `test/` subdirectory copies are thin `` `include `` wrappers for EDA tools (Vivado, etc.) that prefer a `src/`/`test/` layout; they resolve their includes relative to their own directory so Vivado-style project trees work correctly.
 
 ## Architecture Overview
 
