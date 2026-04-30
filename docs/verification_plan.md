@@ -11,13 +11,15 @@
 ```bash
 make regress      # lint + Verilator smoke (CI release gate)
 make regress_cov  # lint + coverage build/run (+ coverage.info if verilator_coverage exists)
+make regress_nl1  # lint + NUM_LANES=1 smoke (obj_dir_nl1)
 make lint         # Verilator -Wall: RTL + assertions + TB (-Wno-SYNCASYNCNET on TB pass)
 make verilator    # Smoke simulation only
 make verilator_cov # Coverage sim only (uses obj_dir_cov; writes coverage.dat)
-make clean        # Remove obj_dir, obj_dir_cov, coverage.info, …
+make verilator_nl1 # NUM_LANES=1 smoke only (after lint)
+make clean        # Remove obj_dir, obj_dir_cov, obj_dir_nl1, coverage.info, …
 ```
 
-GitHub Actions runs **`make regress`** on push/PR to `main` / `master`, then **`make verilator_cov`** (artifact: **`coverage.info`** when `verilator_coverage` is available). See `.github/workflows/verilator.yml`.
+GitHub Actions runs **`make regress`** on push/PR to `main` / `master`, then **`make verilator_cov`** (artifact: **`coverage.info`** when `verilator_coverage` is available) and **`make verilator_nl1`**. See `.github/workflows/verilator.yml`.
 
 ## Smoke testbench
 
@@ -39,6 +41,10 @@ Reference scoreboard: `tb_ucie_rdi_to_pcie_pipe_scoreboard` — queues expected 
 
 **Statistics caveat:** `rdi_error_count` / `pipe_error_count` increment on **every cycle** the respective `*_error` is asserted, not only on completed beats. RDI and PIPE error counts can differ when the error indication is held for different numbers of cycles in the two domains.
 
+## NUM_LANES=1 smoke
+
+Source: `tb_ucie_rdi_to_pcie_pipe_nl1`, clocks from `sim_main_nl1.cpp` (same coarse stepping as `sim_main.cpp`). **Assertions-only** — verifies **`NUM_LANES == 1`** widths/parameters and CDC monitors without the dual-clock scoreboard (scoreboard remains on the main TB where stimulus aligns with its sampling model). Ends at **`rdi_cycle == 60`** with **`[TEST NL1]`** messages.
+
 ## Assertion / monitoring policy
 
 - **RDI:** Data and per-lane `rdi_error` are expected stable while `rdi_valid` stays asserted (matches typical source behavior).
@@ -50,9 +56,9 @@ Reference scoreboard: `tb_ucie_rdi_to_pcie_pipe_scoreboard` — queues expected 
 |------|--------|
 | FIFO read path | PIPE-side buffer read mux indexes `pipe_rd_ptr` (read pointer), not the synchronized write pointer. |
 | CRC gating | CRC advances only on accepted PIPE beats: `pipe_lane_valid && pipe_lane_ready` (placeholder CRC vs residue, not packet-qualified PCIe). |
-| Lint | Three passes: RTL top, assertions top, TB top + full file list (`-Wno-SYNCASYNCNET` on TB pass only). |
+| Lint | Four passes: RTL top, assertions top, main TB top + files, **NUM_LANES=1** TB top + files (`-Wno-SYNCASYNCNET` on TB passes only). |
 | Scoreboard | Reference module compares PIPE accepts to RDI queue per lane; CI/regress fails on mismatch (`$fatal`). |
-| CI | **`sim`** → `make regress`; **`coverage`** (needs sim) → `make verilator_cov`; optional **`coverage.info`** artifact. |
+| CI | **`sim`** → `make regress`; **`coverage`** (needs sim) → `make verilator_cov`; **`nl1`** (needs sim) → `make verilator_nl1`; optional **`coverage.info`** artifact. |
 | TB | Tests 6–7: FIFO fill under stalled PIPE + CRC mirror vs `crc_error`; simulation ends `rdi_cycle == 400`. |
 | Coverage | `make regress_cov` / `obj_dir_cov`; `sim_main.cpp` calls `VerilatedCov::write` when `VM_COVERAGE=1`. |
 
@@ -66,7 +72,7 @@ Reference scoreboard: `tb_ucie_rdi_to_pcie_pipe_scoreboard` — queues expected 
 
 Priorities for higher confidence:
 
-1. **Corner cases** — Dedicated **`NUM_LANES=1`** TB variant or compile sweep; deeper pointer-wrap stimulus.  
+1. **Corner cases** — Deeper pointer-wrap stimulus ( **`NUM_LANES=1`** smoke is in-tree).  
 2. **Coverage closure** — Publish thresholds / reviewed **`coverage.info`** summaries (replace README `%` placeholders).  
 3. **Formal** — Async FIFO invariants + handshake properties (tool-specific).  
 4. **PIPE policy (optional)** — Strict **`valid`⇒data hold** RTL + monitor if integrators require it.

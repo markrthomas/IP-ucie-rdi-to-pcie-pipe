@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. Version tags follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] — 2026-04-30
+
+### Added
+
+- **`tb_ucie_rdi_to_pcie_pipe_nl1.sv`** + **`sim_main_nl1.cpp`**: **NUM_LANES=1** Verilator smoke (**assertions-only**; dual-clock scoreboard stays on the main TB). **`make verilator_nl1`** / **`make regress_nl1`** (**`obj_dir_nl1/`**).
+- CI **`nl1`** job after **`sim`**: **`make verilator_nl1`**.
+
 ## [1.0.3] — 2026-04-30
 
 ### Changed

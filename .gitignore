@@ -1,5 +1,6 @@
 obj_dir/
 obj_dir_cov/
+obj_dir_nl1/
 coverage.info
 *.vcd
 simv

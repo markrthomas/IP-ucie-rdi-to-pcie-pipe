@@ -51,12 +51,13 @@ IP-ucie-rdi-to-pcie-pipe/
 |----------|---------|
 | `ucie_rdi_to_pcie_pipe_bridge.sv` | Sole synthesizable block for integration |
 | `docs/interface_spec.md` | Parameters, reset, handshake rules, PIPE stability caveat |
-| `CHANGELOG.md` | Semantic version history (current release **v1.0.3**) |
+| `CHANGELOG.md` | Semantic version history (current release **v1.0.4**) |
 | `constraints/example.{xdc,sdc}` | CDC timing **templates** — replace placeholders and sign off in your flow |
 | `make regress` | Release gate: lint + Verilator smoke (scoreboard + CRC/FIFO tests) |
 | `make regress_cov` | Optional: lint + Verilator coverage (`obj_dir_cov/coverage.dat`; `coverage.info` if `verilator_coverage` on PATH) |
+| `make regress_nl1` | Optional: lint + **NUM_LANES=1** smoke (**assertions-only**, `obj_dir_nl1/`) |
 
-Tag releases with e.g. `git tag -a v1.0.3 -m "Release v1.0.3"` after validating `make regress`.
+Tag releases with e.g. `git tag -a v1.0.4 -m "Release v1.0.4"` after validating `make regress`.
 
 ## Architecture Overview
 
@@ -336,7 +337,7 @@ After `make verilator` or `make regress`, you should see `[TEST]` lines, **`[SCO
 
 ## Continuous integration
 
-GitHub Actions workflow `.github/workflows/verilator.yml` runs **`make regress`** (lint + Verilator smoke) on push/PR to `main` or `master`, then a dependent job runs **`make verilator_cov`** and uploads **`coverage.info`** as an artifact when **`verilator_coverage`** produces it (Ubuntu `verilator` package).
+GitHub Actions workflow `.github/workflows/verilator.yml` runs **`make regress`** (lint + Verilator smoke) on push/PR to `main` or `master`, then dependent jobs run **`make verilator_cov`** (optional **`coverage.info`** artifact) and **`make verilator_nl1`** (**NUM_LANES=1** smoke).
 
 ## Documentation Files
 

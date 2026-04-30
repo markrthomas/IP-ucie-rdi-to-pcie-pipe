@@ -43,3 +43,18 @@ jobs:
           name: verilator-coverage-info
           path: coverage.info
           if-no-files-found: ignore
+
+  nl1:
+    needs: sim
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator g++
+
+      - name: NUM_LANES=1 smoke (make verilator_nl1)
+        working-directory: ${{ github.workspace }}
+        run: make verilator_nl1
