@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. Version tags follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] — 2026-04-30
+
+### Changed
+
+- CI: add **`coverage`** workflow job after **`sim`** running **`make verilator_cov`**, with optional **`verilator-coverage-info`** artifact (`coverage.info` when `verilator_coverage` is installed).
+
 ## [1.0.2] — 2026-04-30
 
 ### Added

@@ -17,7 +17,7 @@ make verilator_cov # Coverage sim only (uses obj_dir_cov; writes coverage.dat)
 make clean        # Remove obj_dir, obj_dir_cov, coverage.info, …
 ```
 
-GitHub Actions runs **`make regress`** on `main` / `master` (see `.github/workflows/verilator.yml`).
+GitHub Actions runs **`make regress`** on push/PR to `main` / `master`, then **`make verilator_cov`** (artifact: **`coverage.info`** when `verilator_coverage` is available). See `.github/workflows/verilator.yml`.
 
 ## Smoke testbench
 
@@ -52,7 +52,7 @@ Reference scoreboard: `tb_ucie_rdi_to_pcie_pipe_scoreboard` — queues expected 
 | CRC gating | CRC advances only on accepted PIPE beats: `pipe_lane_valid && pipe_lane_ready` (placeholder CRC vs residue, not packet-qualified PCIe). |
 | Lint | Three passes: RTL top, assertions top, TB top + full file list (`-Wno-SYNCASYNCNET` on TB pass only). |
 | Scoreboard | Reference module compares PIPE accepts to RDI queue per lane; CI/regress fails on mismatch (`$fatal`). |
-| CI | Workflow runs `make regress`. |
+| CI | **`sim`** → `make regress`; **`coverage`** (needs sim) → `make verilator_cov`; optional **`coverage.info`** artifact. |
 | TB | Tests 6–7: FIFO fill under stalled PIPE + CRC mirror vs `crc_error`; simulation ends `rdi_cycle == 400`. |
 | Coverage | `make regress_cov` / `obj_dir_cov`; `sim_main.cpp` calls `VerilatedCov::write` when `VM_COVERAGE=1`. |
 

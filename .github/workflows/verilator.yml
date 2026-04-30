@@ -20,3 +20,26 @@ jobs:
       - name: Regression (lint + Verilator smoke)
         working-directory: ${{ github.workspace }}
         run: make regress
+
+  coverage:
+    needs: sim
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator g++
+
+      # Lint already ran in sim; build cov model in obj_dir_cov and emit coverage.dat (+ coverage.info if verilator_coverage exists).
+      - name: Verilator line coverage build and run
+        working-directory: ${{ github.workspace }}
+        run: make verilator_cov
+
+      - name: Upload coverage summary (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: verilator-coverage-info
+          path: coverage.info
+          if-no-files-found: ignore
