@@ -1,4 +1,6 @@
 obj_dir/
+obj_dir_cov/
+coverage.info
 *.vcd
 simv
 simv.daidir/

@@ -24,6 +24,49 @@ module tb_ucie_rdi_to_pcie_pipe_bridge (
 
     logic [31:0] rdi_cycle;
 
+    localparam logic [31:0] CRC_RESIDUE = 32'h1704_7432;
+
+    // Mirror RTL CRC update for lane 0 (same polynomial / bit order as DUT).
+    function automatic logic [31:0] tb_crc32_step(
+        input logic [31:0] data_in,
+        input logic [31:0] crc_in
+    );
+        logic [31:0] crc_temp;
+        logic fb;
+        crc_temp = crc_in;
+        for (int i = 0; i < PIPE_DATA_WIDTH; i++) begin
+            fb = crc_temp[31] ^ data_in[i];
+            crc_temp = crc_temp << 1;
+            if (fb) crc_temp = crc_temp ^ 32'h04C1_1DB7;
+        end
+        return crc_temp;
+    endfunction
+
+    logic [31:0] tb_crc_lane0;
+    always_ff @(posedge pipe_clk or negedge rst_n) begin
+        if (!rst_n) begin
+            tb_crc_lane0 <= 32'hFFFF_FFFF;
+        end else if (!crc_enable[0]) begin
+            tb_crc_lane0 <= 32'hFFFF_FFFF;
+        end else if (crc_enable[0] && pipe_valid[0] && pipe_ready[0]) begin
+            tb_crc_lane0 <= tb_crc32_step(pipe_data[31:0], tb_crc_lane0);
+        end
+    end
+
+    // crc_error when crc_enable: 1 iff residue mismatch (matches DUT assign semantics).
+    always_ff @(negedge pipe_clk) begin
+        if (!rst_n) begin
+        end else if (crc_enable[0]) begin
+            if (crc_error[0] != (tb_crc_lane0 != CRC_RESIDUE)) begin
+                $fatal(1,
+                       "[CRC_CHK] Lane 0 crc_error=%b vs model (tb_crc=%h residue_ok=%b)",
+                       crc_error[0],
+                       tb_crc_lane0,
+                       (tb_crc_lane0 == CRC_RESIDUE));
+            end
+        end
+    end
+
     ucie_rdi_to_pcie_pipe_bridge #(
         .NUM_LANES(NUM_LANES),
         .RDI_DATA_WIDTH(RDI_DATA_WIDTH),
@@ -92,7 +135,7 @@ module tb_ucie_rdi_to_pcie_pipe_bridge (
             rdi_error <= '0;
             crc_enable <= '0;
             pipe_ready <= '1;
-        end else if (rdi_cycle == 32'd280) begin
+        end else if (rdi_cycle == 32'd400) begin
             sb.final_check();
             cdc_mon.print_statistics();
             $display("[TEST] Testbench complete");
@@ -159,6 +202,33 @@ module tb_ucie_rdi_to_pcie_pipe_bridge (
                         rdi_data <= 64'hAAA0_BBB0_CCC0_DDD0;
                     end else if (rdi_cycle == 32'd172) begin
                         rdi_valid <= '0;
+                    end else if (rdi_cycle == 32'd173) begin
+                        $display("[TEST] Test 6: FIFO stress (PIPE stalled, multi-lane push)");
+                    end else if (rdi_cycle == 32'd174) begin
+                        pipe_ready <= 4'b0000;
+                    end else if (rdi_cycle >= 32'd175 && rdi_cycle <= 32'd210) begin
+                        rdi_valid <= 4'b1111;
+                        rdi_data <= 64'hACE0_BAD0_CAFE_F00D;
+                    end else if (rdi_cycle == 32'd211) begin
+                        rdi_valid <= '0;
+                    end else if (rdi_cycle == 32'd212) begin
+                        pipe_ready <= 4'b1111;
+                    end else if (rdi_cycle == 32'd340) begin
+                        $display("[TEST] Test 7: CRC lane 0 (handshake-gated model vs crc_error)");
+                    end else if (rdi_cycle == 32'd341) begin
+                        crc_enable[0] <= 1'b1;
+                    end else if (rdi_cycle == 32'd342) begin
+                        rdi_valid[0] <= 1'b1;
+                        rdi_data[15:0] <= 16'h00_01;
+                    end else if (rdi_cycle == 32'd343) begin
+                        rdi_valid[0] <= 1'b0;
+                    end else if (rdi_cycle == 32'd344) begin
+                        rdi_valid[0] <= 1'b1;
+                        rdi_data[15:0] <= 16'h00_02;
+                    end else if (rdi_cycle == 32'd345) begin
+                        rdi_valid[0] <= 1'b0;
+                    end else if (rdi_cycle == 32'd380) begin
+                        crc_enable[0] <= 1'b0;
                     end
                 end
             endcase

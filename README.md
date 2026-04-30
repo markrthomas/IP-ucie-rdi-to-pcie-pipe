@@ -43,7 +43,7 @@ IP-ucie-rdi-to-pcie-pipe/
     └── verification_plan.md                 # Test and assertion strategy
 ```
 
-> **Note:** `make verilator`, `make regress`, `make lint`, and `make verilator_debug` compile the root-level `.sv` files directly. The `src/` and `test/` subdirectory copies are thin `` `include `` wrappers for EDA tools (Vivado, etc.) that prefer a `src/`/`test/` layout; they resolve their includes relative to their own directory so Vivado-style project trees work correctly.
+> **Note:** `make verilator`, `make regress`, `make regress_cov`, `make lint`, and `make verilator_debug` use the root-level `.sv` files directly. The `src/` and `test/` subdirectory copies are thin `` `include `` wrappers for EDA tools (Vivado, etc.) that prefer a `src/`/`test/` layout; they resolve their includes relative to their own directory so Vivado-style project trees work correctly.
 
 ### Reusable IP delivery
 
@@ -51,11 +51,12 @@ IP-ucie-rdi-to-pcie-pipe/
 |----------|---------|
 | `ucie_rdi_to_pcie_pipe_bridge.sv` | Sole synthesizable block for integration |
 | `docs/interface_spec.md` | Parameters, reset, handshake rules, PIPE stability caveat |
-| `CHANGELOG.md` | Semantic version history (current release **v1.0.1**) |
+| `CHANGELOG.md` | Semantic version history (current release **v1.0.2**) |
 | `constraints/example.{xdc,sdc}` | CDC timing **templates** — replace placeholders and sign off in your flow |
-| `make regress` | Release gate: Verilator lint + smoke simulation with scoreboard |
+| `make regress` | Release gate: lint + Verilator smoke (scoreboard + CRC/FIFO tests) |
+| `make regress_cov` | Optional: lint + Verilator coverage (`obj_dir_cov/coverage.dat`; `coverage.info` if `verilator_coverage` on PATH) |
 
-Tag releases with e.g. `git tag -a v1.0.1 -m "Release v1.0.1"` after validating `make regress`.
+Tag releases with e.g. `git tag -a v1.0.2 -m "Release v1.0.2"` after validating `make regress`.
 
 ## Architecture Overview
 
@@ -242,12 +243,14 @@ The testbench (`tb_ucie_rdi_to_pcie_pipe_bridge.sv`) is a smoke suite with dual 
 3. **PIPE backpressure** — `pipe_ready` low then high while pushing data  
 4. **Error flag** — `rdi_error` on one lane  
 5. **Sustained traffic** — repeated multi-lane bursts  
+6. **FIFO stress** — multi-lane push with PIPE stalled until RDI shows full; then drain (scoreboard)  
+7. **CRC lane 0** — `crc_enable[0]` with a TB mirror of the DUT CRC; continuous check vs `crc_error[0]` while enabled  
+
+Simulation ends at **`rdi_cycle == 400`** (Verilator `sim_main.cpp` time budget unchanged).
 
 The **assertion helper module** is instantiated in the testbench. It emits `$warning` on suspect RDI data/error changes while `rdi_valid` is held, and prints **per-lane transfer counts** at end of simulation via `print_statistics()`. It does not enforce PIPE data hold while valid (the bridge may refresh outputs when valid and not ready). Per-lane `Errors` in the stats count **cycles** with `*_error` asserted, not necessarily error beats—see `docs/verification_plan.md`.
 
 The **scoreboard** (`tb_ucie_rdi_to_pcie_pipe_scoreboard.sv`) checks each PIPE accepted beat against the RDI-side queue for that lane and ends simulation with `$fatal` on mismatch; successful runs print `[SCOREBOARD] PASS`.
-
-For vendor simulators, you can add **SVA** or bind additional properties; Verilator uses the procedural checks in `ucie_rdi_to_pcie_pipe_bridge_assertions.sv` by default.
 
 ## Design Highlights
 
@@ -272,10 +275,10 @@ For vendor simulators, you can add **SVA** or bind additional properties; Verila
 - No critical paths across clock domains
 
 ### Verification ✓
-- Smoke tests with dual clocks and backpressure
+- Smoke tests with dual clocks and backpressure (incl. FIFO stress + CRC lane‑0 model vs `crc_error`)
 - Reference scoreboard (self-checking data/error per lane)
 - CDC monitor (RDI stability checks + transfer statistics)
-- RTL + TB lint via `make lint` (Verilator); release gate `make regress`
+- RTL + TB lint via `make lint` (Verilator); release gate `make regress`; optional **`make regress_cov`**
 
 ## Performance Characteristics
 

@@ -2,6 +2,9 @@
 #include "Vtb_ucie_rdi_to_pcie_pipe_bridge.h"
 #include "verilated.h"
 #include "verilated_vcd_c.h"
+#if VM_COVERAGE
+#include "verilated_cov.h"
+#endif
 
 static vluint64_t g_sim_time_ps = 0;
 
@@ -39,6 +42,10 @@ int main(int argc, char** argv) {
         top->eval();
         tfp->dump(static_cast<vluint64_t>(t_ps));
     }
+
+#if VM_COVERAGE
+    VerilatedCov::write();
+#endif
 
     tfp->close();
     delete tfp;

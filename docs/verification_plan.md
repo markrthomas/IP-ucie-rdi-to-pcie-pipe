@@ -9,10 +9,12 @@
 ## Regression commands (local / CI)
 
 ```bash
-make regress   # lint + Verilator smoke (CI release gate)
-make lint      # Verilator -Wall: RTL + assertions + TB (-Wno-SYNCASYNCNET on TB pass)
-make verilator # Smoke simulation only
-make clean     # Remove obj_dir and common simulator artifacts
+make regress      # lint + Verilator smoke (CI release gate)
+make regress_cov  # lint + coverage build/run (+ coverage.info if verilator_coverage exists)
+make lint         # Verilator -Wall: RTL + assertions + TB (-Wno-SYNCASYNCNET on TB pass)
+make verilator    # Smoke simulation only
+make verilator_cov # Coverage sim only (uses obj_dir_cov; writes coverage.dat)
+make clean        # Remove obj_dir, obj_dir_cov, coverage.info, …
 ```
 
 GitHub Actions runs **`make regress`** on `main` / `master` (see `.github/workflows/verilator.yml`).
@@ -28,6 +30,8 @@ Scenarios:
 3. PIPE backpressure (`pipe_ready` deasserted)  
 4. `rdi_error` on one lane  
 5. Sustained multi-lane traffic  
+6. **FIFO stress** — Multi-lane push while **`pipe_ready = 0`** until **`rdi_flow_ctrl` / `rdi_ready`** show full-handling; then **`pipe_ready`** restored and FIFOs drain (scoreboard checks data/order).  
+7. **CRC lane 0** — **`crc_enable[0]`** with two pulsed beats; TB mirrors **`compute_crc32`** and checks **`crc_error[0]`** vs residue **`0x17047432`** on each **`negedge pipe_clk`** while CRC is enabled.
 
 Monitor module: `ucie_rdi_to_pcie_pipe_bridge_assertions` — RDI data/error stability while valid, per-lane handshake statistics (`print_statistics()`).
 
@@ -49,18 +53,25 @@ Reference scoreboard: `tb_ucie_rdi_to_pcie_pipe_scoreboard` — queues expected 
 | Lint | Three passes: RTL top, assertions top, TB top + full file list (`-Wno-SYNCASYNCNET` on TB pass only). |
 | Scoreboard | Reference module compares PIPE accepts to RDI queue per lane; CI/regress fails on mismatch (`$fatal`). |
 | CI | Workflow runs `make regress`. |
+| TB | Tests 6–7: FIFO fill under stalled PIPE + CRC mirror vs `crc_error`; simulation ends `rdi_cycle == 400`. |
+| Coverage | `make regress_cov` / `obj_dir_cov`; `sim_main.cpp` calls `VerilatedCov::write` when `VM_COVERAGE=1`. |
+
+## Verilator coverage
+
+- **`make verilator_cov`** / **`make regress_cov`** build into **`obj_dir_cov/`** (default **`obj_dir/`** unchanged).
+- **`sim_main.cpp`** calls **`VerilatedCov::write()`** when **`VM_COVERAGE`** is defined at compile time (`g++ -DVM_COVERAGE=1`), producing **`obj_dir_cov/coverage.dat`**.
+- With **`verilator_coverage`** on **`PATH`**, the Makefile emits **`coverage.info`** at the repo root.
 
 ## Coverage and formal (recommended next steps)
 
 Priorities for higher confidence:
 
-1. **Corner cases** — FIFO almost-full/full, pointer wrap, single-lane `NUM_LANES=1`, stress with long `pipe_ready` low periods.  
-2. **CRC tests** — With `crc_enable` asserted: known vectors vs expected residue; reset/disable behavior.  
-3. **Coverage** — Line/FSM/toggle (Verilator coverage or vendor sim) with explicit goals; replace aspirational README `%` figures with measured reports.  
-4. **Formal** — Async FIFO inductive invariants + handshake properties (requires appropriate tooling).  
-5. **PIPE policy (optional)** — If strict PIPE hold is required, align RTL (hold data until handshake) and reintroduce PIPE stability checks in the monitor.
+1. **Corner cases** — Dedicated **`NUM_LANES=1`** TB variant or compile sweep; deeper pointer-wrap stimulus.  
+2. **Coverage closure** — Publish thresholds / reviewed **`coverage.info`** summaries (replace README `%` placeholders).  
+3. **Formal** — Async FIFO invariants + handshake properties (tool-specific).  
+4. **PIPE policy (optional)** — Strict **`valid`⇒data hold** RTL + monitor if integrators require it.
 
-**Done (reusable IP baseline):** Reference scoreboard `tb_ucie_rdi_to_pcie_pipe_scoreboard.sv` (see Smoke testbench).
+**Delivered in-tree:** Scoreboard; FIFO stress + CRC checker in TB; **`regress_cov`** flow.
 
 ## Exit criteria (smoke + lint)
 
