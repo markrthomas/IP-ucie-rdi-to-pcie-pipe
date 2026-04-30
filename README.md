@@ -21,9 +21,12 @@ A production-grade SystemVerilog hardware bridge that converts UCIe 1.0 RDI (Red
 IP-ucie-rdi-to-pcie-pipe/
 ├── ucie_rdi_to_pcie_pipe_bridge.sv          # Canonical RTL (main design + CRC)
 ├── ucie_rdi_to_pcie_pipe_bridge_assertions.sv # CDC monitors and transfer statistics
-├── tb_ucie_rdi_to_pcie_pipe_bridge.sv       # Testbench
+├── tb_ucie_rdi_to_pcie_pipe_bridge.sv       # Smoke stimulus testbench
+├── tb_ucie_rdi_to_pcie_pipe_scoreboard.sv   # Reference scoreboard (self-checking sim)
 ├── sim_top.sv                               # Sim top for VCS/Questa/Xcelium (#-based clocks)
 ├── sim_main.cpp                             # Verilator C++ top (clocks + reset)
+├── constraints/                             # Example CDC timing placeholders (XDC / SDC)
+├── CHANGELOG.md                             # Semantic versioning history (reusable IP)
 ├── src/
 │   └── ucie_rdi_to_pcie_pipe_bridge.sv     # Thin `include wrapper (EDA project convention)
 ├── test/
@@ -36,11 +39,23 @@ IP-ucie-rdi-to-pcie-pipe/
 ├── LICENSE                                  # MIT License
 └── docs/
     ├── architecture.md                      # Detailed design documentation
-    ├── interface_spec.md                    # Signal specifications
+    ├── interface_spec.md                    # Integration contract (parameters, reset, PIPE rules)
     └── verification_plan.md                 # Test and assertion strategy
 ```
 
-> **Note:** `make verilator`, `make lint`, and `make verilator_debug` compile the root-level `.sv` files directly. The `src/` and `test/` subdirectory copies are thin `` `include `` wrappers for EDA tools (Vivado, etc.) that prefer a `src/`/`test/` layout; they resolve their includes relative to their own directory so Vivado-style project trees work correctly.
+> **Note:** `make verilator`, `make regress`, `make lint`, and `make verilator_debug` compile the root-level `.sv` files directly. The `src/` and `test/` subdirectory copies are thin `` `include `` wrappers for EDA tools (Vivado, etc.) that prefer a `src/`/`test/` layout; they resolve their includes relative to their own directory so Vivado-style project trees work correctly.
+
+### Reusable IP delivery
+
+| Artifact | Purpose |
+|----------|---------|
+| `ucie_rdi_to_pcie_pipe_bridge.sv` | Sole synthesizable block for integration |
+| `docs/interface_spec.md` | Parameters, reset, handshake rules, PIPE stability caveat |
+| `CHANGELOG.md` | Semantic version history (current release **v1.0.0**) |
+| `constraints/example.{xdc,sdc}` | CDC timing **templates** — replace placeholders and sign off in your flow |
+| `make regress` | Release gate: Verilator lint + smoke simulation with scoreboard |
+
+Tag releases with `git tag -a v1.0.0 -m "Release v1.0.0"` after validating `make regress`.
 
 ## Architecture Overview
 
@@ -177,7 +192,7 @@ If both `verilator` and `verilator_bin` are on your `PATH`, the Makefile prefers
 make simv
 
 # Or manually:
-vcs -sverilog -debug_all -cm line+tgl ucie_rdi_to_pcie_pipe_bridge.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
+vcs -sverilog -debug_all -cm line+tgl ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge_assertions.sv tb_ucie_rdi_to_pcie_pipe_scoreboard.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
 ./simv -gui
 ```
 
@@ -190,7 +205,7 @@ Supports coverage with `-cm` flags (line, toggle, branch)
 make questa
 
 # Or manually:
-vlog -sv ucie_rdi_to_pcie_pipe_bridge.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
+vlog -sv ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge_assertions.sv tb_ucie_rdi_to_pcie_pipe_scoreboard.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
 vsim -c tb_ucie_rdi_to_pcie_pipe_bridge -do "run -all; quit"
 ```
 
@@ -201,7 +216,7 @@ vsim -c tb_ucie_rdi_to_pcie_pipe_bridge -do "run -all; quit"
 make xsim
 
 # Or manually:
-xmvlog -sv ucie_rdi_to_pcie_pipe_bridge.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
+xmvlog -sv ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge_assertions.sv tb_ucie_rdi_to_pcie_pipe_scoreboard.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
 xmsim tb_ucie_rdi_to_pcie_pipe_bridge
 ```
 
@@ -211,9 +226,12 @@ xmsim tb_ucie_rdi_to_pcie_pipe_bridge
 2. Add source files:
   - `src/ucie_rdi_to_pcie_pipe_bridge.sv`
   - `test/ucie_rdi_to_pcie_pipe_bridge_assertions.sv` (optional, for simulation)
+  - `tb_ucie_rdi_to_pcie_pipe_scoreboard.sv` (optional — reference self-checking sim)
   - `test/tb_ucie_rdi_to_pcie_pipe_bridge.sv`
   - `test/sim_top.sv` (simulation top — instantiates the testbench with internal clocks)
 3. Set simulation top to `sim_top` → Run Behavioral Simulation
+
+When using the root testbench file directly instead of `test/tb_*.sv`, add `tb_ucie_rdi_to_pcie_pipe_scoreboard.sv` from the repo root so `sim_top` compiles.
 
 ## Test Coverage
 
@@ -226,6 +244,8 @@ The testbench (`tb_ucie_rdi_to_pcie_pipe_bridge.sv`) is a smoke suite with dual 
 5. **Sustained traffic** — repeated multi-lane bursts  
 
 The **assertion helper module** is instantiated in the testbench. It emits `$warning` on suspect RDI data/error changes while `rdi_valid` is held, and prints **per-lane transfer counts** at end of simulation via `print_statistics()`. It does not enforce PIPE data hold while valid (the bridge may refresh outputs when valid and not ready). Per-lane `Errors` in the stats count **cycles** with `*_error` asserted, not necessarily error beats—see `docs/verification_plan.md`.
+
+The **scoreboard** (`tb_ucie_rdi_to_pcie_pipe_scoreboard.sv`) checks each PIPE accepted beat against the RDI-side queue for that lane and ends simulation with `$fatal` on mismatch; successful runs print `[SCOREBOARD] PASS`.
 
 For vendor simulators, you can add **SVA** or bind additional properties; Verilator uses the procedural checks in `ucie_rdi_to_pcie_pipe_bridge_assertions.sv` by default.
 
@@ -253,8 +273,9 @@ For vendor simulators, you can add **SVA** or bind additional properties; Verila
 
 ### Verification ✓
 - Smoke tests with dual clocks and backpressure
-- Instantiated CDC monitor (stability checks + transfer statistics)
-- RTL lint via `make lint` (Verilator)
+- Reference scoreboard (self-checking data/error per lane)
+- CDC monitor (RDI stability checks + transfer statistics)
+- RTL + TB lint via `make lint` (Verilator); release gate `make regress`
 
 ## Performance Characteristics
 
@@ -308,17 +329,18 @@ verilator --lint-only ucie_rdi_to_pcie_pipe_bridge.sv
 
 ## Simulation output example
 
-After `make verilator`, you should see `[TEST]` lines from the testbench plus a **CDC Assertion Statistics** block from `cdc_mon.print_statistics()` (RDI/PIPE transfer counts per lane). Waveforms: `obj_dir/dump.vcd` (e.g. `make wave`).
+After `make verilator` or `make regress`, you should see `[TEST]` lines, **`[SCOREBOARD] PASS`**, plus a **CDC Assertion Statistics** block from `cdc_mon.print_statistics()` (RDI/PIPE transfer counts per lane). Waveforms: `obj_dir/dump.vcd` (e.g. `make wave`).
 
 ## Continuous integration
 
-GitHub Actions workflow `.github/workflows/verilator.yml` runs `make lint` then `make verilator` on push/PR to `main` or `master`.
+GitHub Actions workflow `.github/workflows/verilator.yml` runs **`make regress`** (lint + Verilator smoke) on push/PR to `main` or `master`.
 
 ## Documentation Files
 
-- **architecture.md** - In-depth design explanation with waveforms
-- **interface_spec.md** - Detailed signal protocol specifications
-- **verification_plan.md** - Test methodology and assertion strategy
+- **architecture.md** — In-depth design explanation with waveforms  
+- **interface_spec.md** — Integration contract (parameters, reset, PIPE rules, CRC)  
+- **verification_plan.md** — Regression commands, scoreboard, assertion policy  
+- **CHANGELOG.md** — Semantic versioning history  
 
 ## License
 
@@ -332,4 +354,4 @@ Repository: https://github.com/markrthomas/IP-ucie-rdi-to-pcie-pipe
 
 ---
 
-**Note**: This RTL is suitable for FPGA/ASIC integration paths with your own timing and protocol validation. Run `make verilator` and `make lint` before tape-in.
+**Note**: This RTL is suitable for FPGA/ASIC integration paths with your own timing and protocol validation. Run **`make regress`** (or `make lint` and `make verilator`) before tape-in; adapt files under `constraints/` for CDC timing in your flow.

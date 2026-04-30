@@ -1,11 +1,11 @@
 
-.PHONY: clean verilator verilator_debug simv xsim questa wave lint help
+.PHONY: clean verilator verilator_debug simv xsim questa wave lint regress help
 
 VERILATOR ?= $(shell command -v verilator_bin 2>/dev/null || command -v verilator 2>/dev/null)
 VERILATOR_ROOT := $(shell if [ -n "$(VERILATOR)" ]; then realpath "$$(dirname "$(VERILATOR)")/../share/verilator"; fi)
 VERILATOR_INC := $(VERILATOR_ROOT)/include
 
-VERILOG_RTL = ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge_assertions.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
+VERILOG_RTL = ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge_assertions.sv tb_ucie_rdi_to_pcie_pipe_scoreboard.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
 VERILOG_FILES = $(VERILOG_RTL)
 TOP_MODULE = tb_ucie_rdi_to_pcie_pipe_bridge
 TOP_SIMV = sim_top
@@ -14,6 +14,9 @@ VERILATOR_DIR = obj_dir
 
 # Default target
 all: verilator
+
+# Release regression (lint + Verilator smoke); CI runs this target.
+regress: lint verilator
 
 # Verilator Simulation
 verilator:
@@ -75,6 +78,7 @@ lint:
 	@if [ -z "$(VERILATOR)" ]; then echo "ERROR: install verilator or ensure verilator_bin is on PATH"; exit 1; fi
 	$(VERILATOR) --lint-only -Wall --top-module ucie_rdi_to_pcie_pipe_bridge ucie_rdi_to_pcie_pipe_bridge.sv
 	$(VERILATOR) --lint-only -Wall --top-module ucie_rdi_to_pcie_pipe_bridge_assertions ucie_rdi_to_pcie_pipe_bridge_assertions.sv
+	$(VERILATOR) --lint-only -Wall -Wno-SYNCASYNCNET --top-module $(TOP_MODULE) $(VERILOG_FILES)
 
 # Clean up simulation artifacts
 clean:
@@ -87,10 +91,11 @@ clean:
 
 help:
 	@echo "Available targets:"
+	@echo "  make regress             - lint + Verilator smoke (release gate)"
 	@echo "  make verilator          - Compile and simulate with Verilator (default)"
 	@echo "  make verilator_debug    - Verilator with g++ -g -O0"
 	@echo "  make wave               - Open GTKWave on obj_dir/dump.vcd"
-	@echo "  make lint               - Verilator -Wall lint (RTL + assertions, fails on warnings)"
+	@echo "  make lint               - Verilator -Wall (RTL + assertions + TB/scoreboard)"
 	@echo "  make simv               - VCS"
 	@echo "  make questa             - QuestaSim"
 	@echo "  make xsim               - Xcelium"

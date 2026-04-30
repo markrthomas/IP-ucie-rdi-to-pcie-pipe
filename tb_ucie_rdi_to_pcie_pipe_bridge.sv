@@ -65,6 +65,24 @@ module tb_ucie_rdi_to_pcie_pipe_bridge (
         .pipe_error(pipe_error)
     );
 
+    tb_ucie_rdi_to_pcie_pipe_scoreboard #(
+        .NUM_LANES(NUM_LANES),
+        .RDI_DATA_WIDTH(RDI_DATA_WIDTH),
+        .PIPE_DATA_WIDTH(PIPE_DATA_WIDTH)
+    ) sb (
+        .rst_n(rst_n),
+        .rdi_clk(rdi_clk),
+        .pipe_clk(pipe_clk),
+        .rdi_valid(rdi_valid),
+        .rdi_ready(rdi_ready),
+        .rdi_data(rdi_data),
+        .rdi_error(rdi_error),
+        .pipe_valid(pipe_valid),
+        .pipe_ready(pipe_ready),
+        .pipe_data(pipe_data),
+        .pipe_error(pipe_error)
+    );
+
     // RDI cycle counter, stimulus, and clean shutdown (single always_ff for Verilator 4)
     always_ff @(posedge rdi_clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -75,6 +93,7 @@ module tb_ucie_rdi_to_pcie_pipe_bridge (
             crc_enable <= '0;
             pipe_ready <= '1;
         end else if (rdi_cycle == 32'd280) begin
+            sb.final_check();
             cdc_mon.print_statistics();
             $display("[TEST] Testbench complete");
             $finish;
@@ -148,17 +167,19 @@ module tb_ucie_rdi_to_pcie_pipe_bridge (
     end
 
     // Monitors
-    always_ff @(posedge rdi_clk) begin
-        if (rst_n && rdi_valid != '0) begin
+    always_ff @(posedge rdi_clk or negedge rst_n) begin
+        if (!rst_n) begin
+        end else if (rdi_valid != '0) begin
             $display("[RDI] Time=%0t: valid=%b ready=%b data=%h error=%b flow_ctrl=%b",
                      $time, rdi_valid, rdi_ready, rdi_data, rdi_error, rdi_flow_ctrl);
         end
     end
 
-    always_ff @(posedge pipe_clk) begin
-        if (rst_n && pipe_valid != '0) begin
-            $display("[PIPE] Time=%0t: valid=%b, data=%h, error=%b",
-                     $time, pipe_valid, pipe_data, pipe_error);
+    always_ff @(posedge pipe_clk or negedge rst_n) begin
+        if (!rst_n) begin
+        end else if (pipe_valid != '0) begin
+            $display("[PIPE] Time=%0t: valid=%b, data=%h, error=%b, crc_err=%b",
+                     $time, pipe_valid, pipe_data, pipe_error, crc_error);
         end
     end
 
