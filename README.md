@@ -225,7 +225,7 @@ The testbench (`tb_ucie_rdi_to_pcie_pipe_bridge.sv`) is a smoke suite with dual 
 4. **Error flag** — `rdi_error` on one lane  
 5. **Sustained traffic** — repeated multi-lane bursts  
 
-The **assertion helper module** is instantiated in the testbench. It emits `$warning` on suspect RDI data changes during `valid`, checks PIPE-side stability, and prints **per-lane transfer counts** at end of simulation via `print_statistics()`.
+The **assertion helper module** is instantiated in the testbench. It emits `$warning` on suspect RDI data/error changes while `rdi_valid` is held, and prints **per-lane transfer counts** at end of simulation via `print_statistics()`. It does not enforce PIPE data hold while valid (the bridge may refresh outputs when valid and not ready). Per-lane `Errors` in the stats count **cycles** with `*_error` asserted, not necessarily error beats—see `docs/verification_plan.md`.
 
 For vendor simulators, you can add **SVA** or bind additional properties; Verilator uses the procedural checks in `ucie_rdi_to_pcie_pipe_bridge_assertions.sv` by default.
 
@@ -312,7 +312,7 @@ After `make verilator`, you should see `[TEST]` lines from the testbench plus a 
 
 ## Continuous integration
 
-GitHub Actions workflow `.github/workflows/verilator.yml` runs `make verilator` on push/PR to `main` or `master`.
+GitHub Actions workflow `.github/workflows/verilator.yml` runs `make lint` then `make verilator` on push/PR to `main` or `master`.
 
 ## Documentation Files
 

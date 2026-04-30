@@ -1,82 +1,64 @@
-# Verification Plan
+# Verification plan — UCIe RDI → PCIe PIPE bridge
 
-# Verification Plan
+## Goals
 
-## Test Strategy
+- Prove correct CDC (Gray pointers, full/empty, no overflow).
+- Prove RDI valid/ready and PIPE valid/ready behavior under backpressure.
+- Keep regressions fast and reproducible (Verilator smoke + lint in CI).
 
-### Unit Testing
-1. **Clock Domain Crossing (CDC)**
-   - Pointer synchronization correctness
-   - Gray code validity
-   - Metastability settling
+## Regression commands (local / CI)
 
-2. **Buffer Management**
-   - Full/empty flag accuracy
-   - Pointer wrap-around
-   - Data integrity through FIFO
+```bash
+make lint      # Verilator -Wall lint, separate tops: RTL + assertion module
+make verilator # Build + run smoke testbench (dual clocks from sim_main.cpp)
+make clean     # Remove obj_dir and common simulator artifacts
+```
 
-3. **Protocol Compliance**
-   - Valid/ready handshaking
-   - Flow control correctness
-   - Error propagation
+GitHub Actions runs `make lint` then `make verilator` on `main` / `master` (see `.github/workflows/verilator.yml`).
 
-### Integration Testing
-1. **Multi-Lane Operation**
-   - Independent lane operation
-   - Simultaneous transfers
-   - No cross-lane interference
+## Smoke testbench
 
-2. **Frequency Domain Testing**
-   - Fast RDI, slow PIPE
-   - Slow RDI, fast PIPE
-   - Equal frequency clocks
+Source: `tb_ucie_rdi_to_pcie_pipe_bridge` (root `.sv` files), clocks from `sim_main.cpp`.
 
-3. **Stress Testing**
-   - Sustained high-frequency traffic
-   - Backpressure handling
-   - Error injection scenarios
+Scenarios:
 
-## Assertion Coverage
+1. Single-beat transfer on lane 0  
+2. All-lane simultaneous transfer  
+3. PIPE backpressure (`pipe_ready` deasserted)  
+4. `rdi_error` on one lane  
+5. Sustained multi-lane traffic  
 
-### Functional Assertions
-- Data stability during valid
-- Ready signal behavior
-- Handshake protocol compliance
+Monitor module: `ucie_rdi_to_pcie_pipe_bridge_assertions` — RDI data/error stability while valid, per-lane handshake statistics (`print_statistics()`).
 
-### CDC Assertions
-- Pointer synchronization correctness
-- No Gray code errors
-- Metastability settling
+**Statistics caveat:** `rdi_error_count` / `pipe_error_count` increment on **every cycle** the respective `*_error` is asserted, not only on completed beats. RDI and PIPE error counts can differ when the error indication is held for different numbers of cycles in the two domains.
 
-### Coverage Metrics
-- Line coverage: 100%
-- Branch coverage: 95%+
-- Toggle coverage: 90%+
+## Assertion / monitoring policy
 
-## Expected Results
+- **RDI:** Data and per-lane `rdi_error` are expected stable while `rdi_valid` stays asserted (matches typical source behavior).
+- **PIPE:** The bridge may update registered `pipe_data` / `pipe_error` while `pipe_valid && !pipe_ready` (see DUT `always_ff`). There is **no** “stable while valid” check on PIPE data in the monitor so simulation stays aligned with the RTL.
 
-All tests should pass with:
-- Zero data loss under any traffic pattern
-- Proper flow control propagation
-- Correct CDC behavior
-- Valid CRC computation
+## Recent verification-related changes (maintenance log)
 
-## Verification Test Strategy
+| Area | Change |
+|------|--------|
+| FIFO read path | PIPE-side buffer read mux indexes `pipe_rd_ptr` (read pointer), not the synchronized write pointer. |
+| CRC gating | CRC advances only on accepted PIPE beats: `pipe_lane_valid && pipe_lane_ready` (placeholder CRC vs residue, not packet-qualified PCIe). |
+| Lint | `make lint` runs two passes with explicit `--top-module` (no truncation, exit code propagates). Assertions: `BUFFER_DEPTH` sanity generate, RDI checks use async-reset-safe `always_ff`, `pipe_data` kept referenced for lint-only builds. |
+| CI | Workflow runs `make lint` before `make verilator`. |
 
-The verification test strategy for the IP-ucie-rdi-to-pcie-pipe consists of:
+## Coverage and formal (recommended next steps)
 
-1. **Test Environment Setup**: This includes the necessary hardware and software tools required for the functional verification.
-2. **Test Cases Definition**: Creating comprehensive test cases that cover all functional aspects of the design.
-3. **Test Execution**: Running the test cases in simulation and ensuring all scenarios are validated.
-4. **Regression Testing**: Ensuring that previous functionalities are not broken with new changes by running full regression on updates.
-5. **Code Coverage and Assertion Coverage**: Measuring the effectiveness of the test cases in exercising the design.
+Priorities for higher confidence:
 
-## Assertion Coverage
+1. **Self-checking scoreboard** — Expected data per lane per beat (avoid relying only on prints and transfer counts).  
+2. **Corner cases** — FIFOalmost-full/full, pointer wrap, single-lane `NUM_LANES=1`, min `BUFFER_DEPTH` if supported.  
+3. **CRC tests** — With `crc_enable` asserted: known vectors vs expected residue; reset/disable behavior.  
+4. **Coverage** — Line/FSM/toggle (Verilator coverage or vendor sim) with explicit goals; current README `%` figures remain aspirational until measured.  
+5. **Formal** — Async FIFO inductive invariants + handshake properties (requires appropriate tooling).  
+6. **PIPE policy (optional)** — If strict PIPE hold is required, align RTL (hold data until handshake) and reintroduce PIPE stability checks in the monitor.
 
-Assertion coverage will be monitored by:
-- Utilizing assertion-based verification methodologies to ensure real-time monitoring of signal conditions.
-- Incorporating assertions in the RTL code to check for design correctness.
-- Using coverage metrics to determine the completeness of the verification process. 
+## Exit criteria (smoke + lint)
 
-The goal is to achieve over 90% assertion coverage by the end of the verification process.
-
+- `make lint` completes with no Verilator warnings promoted to errors.  
+- `make verilator` runs to `$finish` with no unexpected `$warning` from CDC monitors.  
+- Transfer counts remain consistent between RDI (`valid && ready`) and PIPE (`valid && ready`) sides per lane for the smoke stimulus (modulo error-statistics caveat above).

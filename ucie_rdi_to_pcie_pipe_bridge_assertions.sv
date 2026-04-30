@@ -27,6 +27,15 @@ module ucie_rdi_to_pcie_pipe_bridge_assertions #(
     input  logic [NUM_LANES-1:0]                pipe_error
 );
 
+    // `pipe_data` has no procedural checks here; xor keeps the port referenced for Verilator --lint-only.
+    wire unused_pipe_data_scrub = ^{pipe_data};
+
+    generate
+        if (BUFFER_DEPTH < 1) begin : buffer_depth_chk
+            initial $fatal(1, "BUFFER_DEPTH must be >= 1");
+        end
+    endgenerate
+
     // ========== RDI Domain Stability Checking ==========
 
     logic [NUM_LANES*RDI_DATA_WIDTH-1:0] rdi_data_d1;
@@ -44,34 +53,25 @@ module ucie_rdi_to_pcie_pipe_bridge_assertions #(
         end
     end
 
-    // Check if data is stable when valid
+    // Check data/error stable while valid (posedge-only checks inside always_ff for rst_n consistency)
     generate
         for (genvar i = 0; i < NUM_LANES; i++) begin : RDI_STABILITY
-            always @(posedge rdi_clk) begin
-                if (rst_n && rdi_valid[i] && rdi_valid_d1[i]) begin
-                    // Data should remain stable during valid assertion
+            always_ff @(posedge rdi_clk or negedge rst_n) begin
+                if (!rst_n) begin
+                    // no checks during reset (avoid SYNCASYNCNET on rst_n)
+                end else if (rdi_valid[i] && rdi_valid_d1[i]) begin
                     if (rdi_data[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH] != rdi_data_d1[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH]) begin
                         $warning("[CDC_WARNING] RDI Lane %0d data changed while valid", i);
+                    end
+                    if (rdi_error[i] != rdi_error_d1[i]) begin
+                        $warning("[CDC_WARNING] RDI Lane %0d error flag changed while valid", i);
                     end
                 end
             end
         end
     endgenerate
 
-    // ========== PIPE Domain Stability Checking ==========
-
-    logic [NUM_LANES*PIPE_DATA_WIDTH-1:0] pipe_data_d1;
-    logic [NUM_LANES-1:0] pipe_valid_d1;
-
-    always_ff @(posedge pipe_clk or negedge rst_n) begin
-        if (!rst_n) begin
-            pipe_data_d1 <= '0;
-            pipe_valid_d1 <= '0;
-        end else begin
-            pipe_data_d1 <= pipe_data;
-            pipe_valid_d1 <= pipe_valid;
-        end
-    end
+    // PIPE-side: bridge may update registered outputs while valid && !ready; no data-hold check here.
 
     // ========== Transfer Counting and Statistics ==========
 

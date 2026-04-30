@@ -73,7 +73,8 @@ vivado:
 
 lint:
 	@if [ -z "$(VERILATOR)" ]; then echo "ERROR: install verilator or ensure verilator_bin is on PATH"; exit 1; fi
-	$(VERILATOR) --lint-only -Wall ucie_rdi_to_pcie_pipe_bridge.sv 2>&1 | head -80; true
+	$(VERILATOR) --lint-only -Wall --top-module ucie_rdi_to_pcie_pipe_bridge ucie_rdi_to_pcie_pipe_bridge.sv
+	$(VERILATOR) --lint-only -Wall --top-module ucie_rdi_to_pcie_pipe_bridge_assertions ucie_rdi_to_pcie_pipe_bridge_assertions.sv
 
 # Clean up simulation artifacts
 clean:
@@ -89,7 +90,7 @@ help:
 	@echo "  make verilator          - Compile and simulate with Verilator (default)"
 	@echo "  make verilator_debug    - Verilator with g++ -g -O0"
 	@echo "  make wave               - Open GTKWave on obj_dir/dump.vcd"
-	@echo "  make lint               - Verilator lint on RTL (best-effort)"
+	@echo "  make lint               - Verilator -Wall lint (RTL + assertions, fails on warnings)"
 	@echo "  make simv               - VCS"
 	@echo "  make questa             - QuestaSim"
 	@echo "  make xsim               - Xcelium"

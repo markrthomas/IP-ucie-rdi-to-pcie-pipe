@@ -134,8 +134,8 @@ module ucie_rdi_to_pcie_pipe_bridge #(
             logic pipe_error_mux;
 
             assign pipe_data_mux = {{(PIPE_DATA_WIDTH-RDI_DATA_WIDTH){1'b0}},
-                                    rdi_buffer[pipe_wr_ptr[$clog2(BUFFER_DEPTH)-1:0]].data};
-            assign pipe_error_mux = rdi_buffer[pipe_wr_ptr[$clog2(BUFFER_DEPTH)-1:0]].error;
+                                    rdi_buffer[pipe_rd_ptr[$clog2(BUFFER_DEPTH)-1:0]].data};
+            assign pipe_error_mux = rdi_buffer[pipe_rd_ptr[$clog2(BUFFER_DEPTH)-1:0]].error;
 
             always_ff @(posedge pipe_clk or negedge rst_n) begin
                 if (!rst_n) begin
@@ -186,7 +186,7 @@ module ucie_rdi_to_pcie_pipe_bridge #(
             always_ff @(posedge pipe_clk or negedge rst_n) begin
                 if (!rst_n) begin
                     crc_result <= 32'hFFFF_FFFF;
-                end else if (crc_enable[lane] && pipe_lane_valid) begin
+                end else if (crc_enable[lane] && pipe_lane_valid && pipe_lane_ready) begin
                     crc_result <= compute_crc32(pipe_lane_data, crc_result);
                 end else if (!crc_enable[lane]) begin
                     crc_result <= 32'hFFFF_FFFF;
