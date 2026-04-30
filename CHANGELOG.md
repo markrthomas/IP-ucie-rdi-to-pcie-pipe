@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. Version tags follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-04-30
+
+### Fixed
+
+- Scoreboard: replace struct literal `'{data:, error:}` in `push_back` with field-wise assignments for **Verilator 5.020** (Ubuntu CI) compatibility (`UNSUPPORTED` on assignment patterns).
+
 ## [1.0.0] — 2026-04-30
 
 ### Added

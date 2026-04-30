@@ -47,8 +47,10 @@ module tb_ucie_rdi_to_pcie_pipe_scoreboard #(
         end else begin
             for (ln = 0; ln < NUM_LANES; ln++) begin
                 if (rdi_valid[ln] && rdi_ready[ln]) begin
-                    exp_q[ln].push_back('{data: rdi_data[ln * RDI_DATA_WIDTH +: RDI_DATA_WIDTH],
-                                          error: rdi_error[ln]});
+                    exp_beat_t new_beat;
+                    new_beat.data  = rdi_data[ln * RDI_DATA_WIDTH +: RDI_DATA_WIDTH];
+                    new_beat.error = rdi_error[ln];
+                    exp_q[ln].push_back(new_beat);
                 end
             end
         end

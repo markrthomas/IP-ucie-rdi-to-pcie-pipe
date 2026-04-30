@@ -51,11 +51,11 @@ IP-ucie-rdi-to-pcie-pipe/
 |----------|---------|
 | `ucie_rdi_to_pcie_pipe_bridge.sv` | Sole synthesizable block for integration |
 | `docs/interface_spec.md` | Parameters, reset, handshake rules, PIPE stability caveat |
-| `CHANGELOG.md` | Semantic version history (current release **v1.0.0**) |
+| `CHANGELOG.md` | Semantic version history (current release **v1.0.1**) |
 | `constraints/example.{xdc,sdc}` | CDC timing **templates** — replace placeholders and sign off in your flow |
 | `make regress` | Release gate: Verilator lint + smoke simulation with scoreboard |
 
-Tag releases with `git tag -a v1.0.0 -m "Release v1.0.0"` after validating `make regress`.
+Tag releases with e.g. `git tag -a v1.0.1 -m "Release v1.0.1"` after validating `make regress`.
 
 ## Architecture Overview
 
