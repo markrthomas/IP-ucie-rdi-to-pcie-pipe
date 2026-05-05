@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. Version tags follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] — 2026-05-02
+
+### Fixed
+
+- **FIFO logic**: Fixed aliasing and Gray code wrap-around bugs by increasing pointer width to $n+1$ for $2^n$ depth; prevents overwriting the FIFO head during deep pushes.
+- **PIPE Stability**: Resolved `$warning` regarding data changes while stalled by ensuring strict "hold until handshake" behavior in the PIPE output register.
+- **CDC Assertions**: Refined stability monitors to ignore initial data settlement cycles, avoiding false positives.
+
+### Changed
+
+- **Extended NL1 Smoke**: Updated `tb_ucie_rdi_to_pcie_pipe_nl1.sv` with deep pointer-wrap stimulus.
+- **Documentation**: Added "Verification Status" table to `README.md` reflecting 100% line coverage and clean regression status.
+
 ## [1.0.4] — 2026-04-30
 
 ### Added

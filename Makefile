@@ -7,16 +7,16 @@ VERILATOR_INC := $(VERILATOR_ROOT)/include
 VERILATOR_CPP_CORE = $(VERILATOR_INC)/verilated.cpp $(VERILATOR_INC)/verilated_vcd_c.cpp \
 	$(VERILATOR_INC)/verilated_threads.cpp
 
-VERILOG_RTL = ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge_assertions.sv tb_ucie_rdi_to_pcie_pipe_scoreboard.sv tb_ucie_rdi_to_pcie_pipe_bridge.sv
+VERILOG_RTL = src/ucie_rdi_fifo_cdc.sv src/ucie_rdi_to_pcie_pipe_bridge.sv test/ucie_rdi_to_pcie_pipe_bridge_assertions.sv test/tb_ucie_rdi_to_pcie_pipe_scoreboard.sv test/tb_ucie_rdi_to_pcie_pipe_bridge.sv
 VERILOG_FILES = $(VERILOG_RTL)
 TOP_MODULE = tb_ucie_rdi_to_pcie_pipe_bridge
 TOP_SIMV = sim_top
-VERILOG_SIMV = sim_top.sv $(VERILOG_RTL)
+VERILOG_SIMV = test/sim_top.sv $(VERILOG_RTL)
 VERILATOR_DIR = obj_dir
 COV_DIR = obj_dir_cov
 NL1_TOP = tb_ucie_rdi_to_pcie_pipe_nl1
 NL1_DIR = obj_dir_nl1
-NL1_FILES = ucie_rdi_to_pcie_pipe_bridge.sv ucie_rdi_to_pcie_pipe_bridge_assertions.sv tb_ucie_rdi_to_pcie_pipe_nl1.sv
+NL1_FILES = src/ucie_rdi_fifo_cdc.sv src/ucie_rdi_to_pcie_pipe_bridge.sv test/ucie_rdi_to_pcie_pipe_bridge_assertions.sv test/tb_ucie_rdi_to_pcie_pipe_nl1.sv
 
 # Default target
 all: verilator
@@ -121,10 +121,10 @@ vivado:
 
 lint:
 	@if [ -z "$(VERILATOR)" ]; then echo "ERROR: install verilator or ensure verilator_bin is on PATH"; exit 1; fi
-	$(VERILATOR) --lint-only -Wall --top-module ucie_rdi_to_pcie_pipe_bridge ucie_rdi_to_pcie_pipe_bridge.sv
-	$(VERILATOR) --lint-only -Wall --top-module ucie_rdi_to_pcie_pipe_bridge_assertions ucie_rdi_to_pcie_pipe_bridge_assertions.sv
-	$(VERILATOR) --lint-only -Wall -Wno-SYNCASYNCNET --top-module $(TOP_MODULE) $(VERILOG_FILES)
-	$(VERILATOR) --lint-only -Wall -Wno-SYNCASYNCNET --top-module $(NL1_TOP) $(NL1_FILES)
+	$(VERILATOR) --lint-only -Wall -Isrc --top-module ucie_rdi_to_pcie_pipe_bridge src/ucie_rdi_fifo_cdc.sv src/ucie_rdi_to_pcie_pipe_bridge.sv
+	$(VERILATOR) --lint-only -Wall -Isrc --top-module ucie_rdi_to_pcie_pipe_bridge_assertions test/ucie_rdi_to_pcie_pipe_bridge_assertions.sv
+	$(VERILATOR) --lint-only -Wall -Isrc -Wno-SYNCASYNCNET --top-module $(TOP_MODULE) $(VERILOG_FILES)
+	$(VERILATOR) --lint-only -Wall -Isrc -Wno-SYNCASYNCNET --top-module $(NL1_TOP) $(NL1_FILES)
 
 # Clean up simulation artifacts
 clean:

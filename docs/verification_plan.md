@@ -23,7 +23,7 @@ GitHub Actions runs **`make regress`** on push/PR to `main` / `master`, then **`
 
 ## Smoke testbench
 
-Source: `tb_ucie_rdi_to_pcie_pipe_bridge` (root `.sv` files), clocks from `sim_main.cpp`.
+Source: `test/tb_ucie_rdi_to_pcie_pipe_bridge.sv`, clocks from `sim_main.cpp`.
 
 Scenarios:
 
@@ -35,9 +35,9 @@ Scenarios:
 6. **FIFO stress** — Multi-lane push while **`pipe_ready = 0`** until **`rdi_flow_ctrl` / `rdi_ready`** show full-handling; then **`pipe_ready`** restored and FIFOs drain (scoreboard checks data/order).  
 7. **CRC lane 0** — **`crc_enable[0]`** with two pulsed beats; TB mirrors **`compute_crc32`** and checks **`crc_error[0]`** vs residue **`0x17047432`** on each **`negedge pipe_clk`** while CRC is enabled.
 
-Monitor module: `ucie_rdi_to_pcie_pipe_bridge_assertions` — RDI data/error stability while valid, per-lane handshake statistics (`print_statistics()`).
+Monitor module: `test/ucie_rdi_to_pcie_pipe_bridge_assertions.sv` — RDI data/error stability while valid, per-lane handshake statistics (`print_statistics()`).
 
-Reference scoreboard: `tb_ucie_rdi_to_pcie_pipe_scoreboard` — queues expected beats from `rdi_valid && rdi_ready`, pops on `pipe_valid && pipe_ready`, compares zero-extended data and error on **`negedge pipe_clk`** after each handshake so registered PIPE outputs match nonblocking updates.
+Reference scoreboard: `test/tb_ucie_rdi_to_pcie_pipe_scoreboard.sv` — queues expected beats from `rdi_valid && rdi_ready`, pops on `pipe_valid && pipe_ready`, compares zero-extended data and error on **`negedge pipe_clk`** after each handshake so registered PIPE outputs match nonblocking updates.
 
 **Statistics caveat:** `rdi_error_count` / `pipe_error_count` increment on **every cycle** the respective `*_error` is asserted, not only on completed beats. RDI and PIPE error counts can differ when the error indication is held for different numbers of cycles in the two domains.
 

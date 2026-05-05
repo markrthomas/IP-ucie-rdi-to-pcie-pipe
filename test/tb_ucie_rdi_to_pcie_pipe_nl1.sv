@@ -1,3 +1,4 @@
+
 `timescale 1ns/1ps
 
 /**
@@ -15,17 +16,20 @@ module tb_ucie_rdi_to_pcie_pipe_nl1 (
     localparam int PIPE_DATA_WIDTH = 32;
     localparam int BUFFER_DEPTH = 16;
 
-    logic [NUM_LANES-1:0] rdi_valid, rdi_error;
     /* verilator lint_off UNUSEDSIGNAL */
-    logic [NUM_LANES-1:0] rdi_flow_ctrl;
-    /* verilator lint_on UNUSEDSIGNAL */
+    logic [NUM_LANES-1:0] rdi_valid, rdi_error, rdi_flow_ctrl;
     wire [NUM_LANES-1:0] rdi_ready;
     logic [NUM_LANES*RDI_DATA_WIDTH-1:0] rdi_data;
-    logic [NUM_LANES-1:0] pipe_valid, pipe_ready, pipe_error, crc_enable;
-    /* verilator lint_off UNUSEDSIGNAL */
-    logic [NUM_LANES-1:0] crc_error;
-    /* verilator lint_on UNUSEDSIGNAL */
+    logic [NUM_LANES-1:0] pipe_valid, pipe_ready, pipe_error, crc_error, crc_enable;
     logic [NUM_LANES*PIPE_DATA_WIDTH-1:0] pipe_data;
+
+    // Receive path signals
+    logic [NUM_LANES-1:0] rdi_rx_valid, rdi_rx_error, rdi_rx_ready;
+    logic [NUM_LANES*RDI_DATA_WIDTH-1:0] rdi_rx_data;
+    logic [NUM_LANES-1:0] pipe_rx_valid, pipe_rx_error;
+    wire [NUM_LANES-1:0] pipe_rx_ready;
+    logic [NUM_LANES*PIPE_DATA_WIDTH-1:0] pipe_rx_data;
+    /* verilator lint_on UNUSEDSIGNAL */
 
     logic [31:0] rdi_cycle;
 
@@ -47,6 +51,14 @@ module tb_ucie_rdi_to_pcie_pipe_nl1 (
         .pipe_ready(pipe_ready),
         .pipe_data(pipe_data),
         .pipe_error(pipe_error),
+        .rdi_rx_valid(rdi_rx_valid),
+        .rdi_rx_ready(rdi_rx_ready),
+        .rdi_rx_data(rdi_rx_data),
+        .rdi_rx_error(rdi_rx_error),
+        .pipe_rx_valid(pipe_rx_valid),
+        .pipe_rx_ready(pipe_rx_ready),
+        .pipe_rx_data(pipe_rx_data),
+        .pipe_rx_error(pipe_rx_error),
         .crc_error(crc_error),
         .crc_enable(crc_enable)
     );
@@ -54,8 +66,7 @@ module tb_ucie_rdi_to_pcie_pipe_nl1 (
     ucie_rdi_to_pcie_pipe_bridge_assertions #(
         .NUM_LANES(NUM_LANES),
         .RDI_DATA_WIDTH(RDI_DATA_WIDTH),
-        .PIPE_DATA_WIDTH(PIPE_DATA_WIDTH),
-        .BUFFER_DEPTH(BUFFER_DEPTH)
+        .PIPE_DATA_WIDTH(PIPE_DATA_WIDTH)
     ) cdc_mon (
         .rst_n(rst_n),
         .rdi_clk(rdi_clk),
@@ -67,7 +78,15 @@ module tb_ucie_rdi_to_pcie_pipe_nl1 (
         .pipe_valid(pipe_valid),
         .pipe_ready(pipe_ready),
         .pipe_data(pipe_data),
-        .pipe_error(pipe_error)
+        .pipe_error(pipe_error),
+        .pipe_rx_valid(pipe_rx_valid),
+        .pipe_rx_ready(pipe_rx_ready),
+        .pipe_rx_data(pipe_rx_data),
+        .pipe_rx_error(pipe_rx_error),
+        .rdi_rx_valid(rdi_rx_valid),
+        .rdi_rx_ready(rdi_rx_ready),
+        .rdi_rx_data(rdi_rx_data),
+        .rdi_rx_error(rdi_rx_error)
     );
 
     always_ff @(posedge rdi_clk or negedge rst_n) begin
@@ -78,7 +97,12 @@ module tb_ucie_rdi_to_pcie_pipe_nl1 (
             rdi_error <= '0;
             crc_enable <= '0;
             pipe_ready <= '1;
-        end else if (rdi_cycle == 32'd60) begin
+            // RX path defaults
+            rdi_rx_ready <= '1;
+            pipe_rx_valid <= '0;
+            pipe_rx_data <= '0;
+            pipe_rx_error <= '0;
+        end else if (rdi_cycle == 32'd200) begin
             cdc_mon.print_statistics();
             $display("[TEST NL1] NUM_LANES=1 smoke complete (assertions-only; no scoreboard)");
             $finish;
@@ -95,9 +119,32 @@ module tb_ucie_rdi_to_pcie_pipe_nl1 (
                     rdi_data[RDI_DATA_WIDTH-1:0] <= 16'h1234;
                 end
                 32'd24: rdi_valid <= 1'b0;
+                
+                // Deep push / wrap-around test
+                32'd40: begin
+                    $display("[TEST NL1] Starting deep push (wrap-around test)");
+                    pipe_ready <= 1'b0;
+                end
+                32'd42: begin
+                    rdi_valid <= 1'b1;
+                    rdi_data[RDI_DATA_WIDTH-1:0] <= 16'hAAAA;
+                end
+                // Push until rdi_cycle 80 (approx 38 items, BUFFER_DEPTH=16)
+                32'd80: begin
+                    rdi_valid <= 1'b0;
+                end
+                32'd90: begin
+                    $display("[TEST NL1] Draining FIFO");
+                    pipe_ready <= 1'b1;
+                end
                 default: ;
             endcase
             rdi_cycle <= rdi_cycle + 1;
+        end
+    end
+
+    always_ff @(posedge pipe_clk or negedge rst_n) begin
+        if (!rst_n) begin
         end
     end
 
