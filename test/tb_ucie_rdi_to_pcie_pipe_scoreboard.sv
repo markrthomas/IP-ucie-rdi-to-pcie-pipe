@@ -28,7 +28,9 @@ module tb_ucie_rdi_to_pcie_pipe_scoreboard #(
     // Receive Path (PIPE -> Bridge -> RDI)
     input logic [NUM_LANES-1:0]                pipe_rx_valid,
     input logic [NUM_LANES-1:0]                pipe_rx_ready,
+    /* verilator lint_off UNUSEDSIGNAL */
     input logic [NUM_LANES*PIPE_DATA_WIDTH-1:0] pipe_rx_data,
+    /* verilator lint_on UNUSEDSIGNAL */
     input logic [NUM_LANES-1:0]                pipe_rx_error,
     input logic [NUM_LANES-1:0]                rdi_rx_valid,
     input logic [NUM_LANES-1:0]                rdi_rx_ready,
@@ -94,11 +96,12 @@ module tb_ucie_rdi_to_pcie_pipe_scoreboard #(
                     rx_exp_q[lane].delete();
                 end else begin
                     if (pipe_rx_valid[lane] && pipe_rx_ready[lane]) begin
-                        rx_exp_q[lane].push_back('{
+                        automatic score_entry_t entry = '{
                             data: {{(PIPE_DATA_WIDTH-RDI_DATA_WIDTH){1'b0}},
                                    pipe_rx_data[lane*PIPE_DATA_WIDTH +: RDI_DATA_WIDTH]},
                             error: pipe_rx_error[lane]
-                        });
+                        };
+                        rx_exp_q[lane].push_back(entry);
                     end
                 end
             end
