@@ -1,0 +1,30 @@
+
+# VCS Makefile for UVM Environment
+
+VCS = vcs -sverilog -ntb_opts uvm-1.2 \
+      -timescale=1ns/1ps \
+      -debug_access+all \
+      -kdb -lca \
+      +incdir+../../src \
+      +incdir+. \
+      +incdir+seq_lib
+
+SRCS = ../../src/ucie_rdi_fifo_cdc.sv \
+       ../../src/ucie_rdi_to_pcie_pipe_bridge.sv \
+       ucie_rdi_if.sv \
+       pcie_pipe_if.sv \
+       ucie_rdi_pcie_pkg.sv \
+       seq_lib/ucie_rdi_seq_lib.sv \
+       uvm_test_top.sv
+
+all: compile run
+
+compile:
+	$(VCS) $(SRCS) -l compile.log
+
+run:
+	./simv +UVM_TESTNAME=ucie_rdi_pcie_sanity_test -l sim.log
+
+clean:
+	rm -rf simv* csrc DVEfiles inter.vpd ucli.key compile.log sim.log
+	rm -rf stack.info.* .vdb
