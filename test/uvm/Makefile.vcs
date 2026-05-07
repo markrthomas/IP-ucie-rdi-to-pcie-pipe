@@ -25,6 +25,9 @@ compile:
 run:
 	./simv +UVM_TESTNAME=ucie_rdi_pcie_sanity_test -l sim.log
 
+pdf:
+	pandoc README.md -o UVM_README.pdf --toc --number-sections
+
 clean:
 	rm -rf simv* csrc DVEfiles inter.vpd ucli.key compile.log sim.log
-	rm -rf stack.info.* .vdb
+	rm -rf stack.info.* .vdb UVM_README.pdf
