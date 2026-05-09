@@ -220,8 +220,8 @@ package ucie_rdi_pcie_pkg;
         endfunction
 
         function void write_rdi(ucie_rdi_transaction tr);
-            for (int i=0; i<4; i++) begin
-                if (tr.valid[i]) begin
+            for (int i = 0; i < 4; i++) begin
+                if (tr.valid[i] && tr.ready[i]) begin
                     ucie_rdi_transaction exp = ucie_rdi_transaction::type_id::create("exp");
                     exp.copy(tr);
                     tx_exp_q[i].push_back(exp);
@@ -230,17 +230,34 @@ package ucie_rdi_pcie_pkg;
         endfunction
 
         function void write_pipe(pcie_pipe_transaction tr);
-            for (int i=0; i<4; i++) begin
-                if (tr.valid[i]) begin
+            for (int i = 0; i < 4; i++) begin
+                if (tr.valid[i] && tr.ready[i]) begin
                     if (tx_exp_q[i].size() == 0) begin
                         `uvm_error("SB", $sformatf("Unexpected PIPE beat on lane %0d", i))
                     end else begin
                         ucie_rdi_transaction exp = tx_exp_q[i].pop_front();
-                        // Compare data (16-bit to 32-bit zero extend)
                         if (tr.data[i*32 +: 16] != exp.data[i*16 +: 16]) begin
-                            `uvm_error("SB", $sformatf("Mismatch lane %0d: exp=%h got=%h", i, exp.data[i*16 +: 16], tr.data[i*32 +: 16]))
+                            `uvm_error("SB", $sformatf("Mismatch lane %0d data: exp=%h got=%h",
+                                                      i, exp.data[i*16 +: 16], tr.data[i*32 +: 16]))
+                        end
+                        if (tr.data[i*32+16 +: 16] !== 16'h0) begin
+                            `uvm_error("SB", $sformatf("Lane %0d: PIPE upper 16 bits not zero-extended: %h",
+                                                      i, tr.data[i*32 +: 32]))
+                        end
+                        if (tr.error[i] !== exp.error[i]) begin
+                            `uvm_error("SB", $sformatf("Mismatch lane %0d error: exp=%b got=%b", i, exp.error[i], tr.error[i]))
                         end
                     end
+                end
+            end
+        endfunction
+
+        virtual function void check_phase(uvm_phase phase);
+            super.check_phase(phase);
+            for (int i = 0; i < 4; i++) begin
+                if (tx_exp_q[i].size() != 0) begin
+                    `uvm_error("SB_DRAIN", $sformatf("TX lane %0d: %0d expected beats still queued at end of test",
+                                                     i, tx_exp_q[i].size()))
                 end
             end
         endfunction

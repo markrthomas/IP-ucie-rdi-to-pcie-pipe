@@ -96,27 +96,27 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 
 | Sequence | Stimulus | Intended check | Current checking strength |
 |----------|----------|----------------|---------------------------|
-| `ucie_rdi_single_lane_seq` | One lane-0 beat with `data == 64'hDEAD` | Basic lane-0 TX transport | Lower 16 bits compared on lane 0. |
-| `ucie_rdi_multi_lane_seq` | One all-lane beat with lane-specific 16-bit words | Lane packing and independent per-lane queueing | Lower 16 bits compared for lanes with observed PIPE valid. |
-| `ucie_rdi_error_seq` | Lane-2 valid with `error[2] == 1` | Error propagation | Not currently checked by scoreboard. |
+| `ucie_rdi_single_lane_seq` | One lane-0 beat with `data == 64'hDEAD` | Basic lane-0 TX transport | Lower 16 bits and zero-extended upper half on lane 0. |
+| `ucie_rdi_multi_lane_seq` | One all-lane beat with lane-specific 16-bit words | Lane packing and independent per-lane queueing | Same per lane with observed PIPE handshake. |
+| `ucie_rdi_error_seq` | Lane-2 valid with `error[2] == 1` | Error propagation | **Error bit compared** on observed PIPE beats (with data/zero-extension checks). |
 | `ucie_rdi_flow_ctrl_seq` | Twenty lane-1 beats | Repeated traffic through FIFO | Data order checked if PIPE accepts all beats; no forced stall or full condition. |
 
 ## Scoreboard contract
 
 | Expected behavior | Current implementation | Gap to close |
 |-------------------|------------------------|--------------|
-| Accepted RDI beat creates one expected item per accepted lane | `write_rdi()` pushes copied transaction into `tx_exp_q[i]` when `tr.valid[i]` is set | It should gate by `valid & ready` per lane instead of `valid` alone. |
-| Accepted PIPE beat consumes one expected item per accepted lane | `write_pipe()` pops `tx_exp_q[i]` when `tr.valid[i]` is set | It should gate by `valid & ready` per lane for symmetry and future backpressure tests. |
-| RDI 16-bit data zero-extends into PIPE 32-bit data | Lower 16 bits are compared | Upper 16 bits should be checked for zero. |
-| Error bit propagates from RDI to PIPE | Error sequence drives lane-2 error | Scoreboard should compare `tr.error[i]` to `exp.error[i]`. |
-| End-of-test drains all expected queues | Not checked | Add `check_phase` or `final_phase` queue-empty checks. |
+| Accepted **RDI** lane handshake creates one expected queue entry | `write_rdi()` pushes when `tr.valid[i] && tr.ready[i]` (monitor emits on full-beat handshakes) | None for TX enqueue semantics. |
+| Accepted **PIPE** lane handshake consumes one expected entry | `write_pipe()` pops when `tr.valid[i] && tr.ready[i]` | None for TX dequeue semantics. |
+| RDI 16-bit data zero-extends into PIPE 32-bit data | Lower **and upper** 16 PIPE bits checked vs. zero-extension | None for width check on expectations driven from RDI. |
+| Error bit propagates from RDI to PIPE | `write_pipe()` compares `tr.error[i]` vs. stored expectation | None for lanes exercised by sequences. |
+| End-of-test drains all TX expectation queues | `check_phase` reports `SB_DRAIN` if any `tx_exp_q[i]` non-empty | RX path / system-level closure still open. |
 
 ## Recommended UVM closure plan
 
 | Priority | Work item | Why it matters |
 |----------|-----------|----------------|
 | 1 | Make transaction widths parameter-aware or centralize lane/data constants in a config object | Prevents divergence from RTL parameters and enables `NUM_LANES=1` UVM tests. |
-| 2 | Fix scoreboard lane gating, upper-bit zero checks, error checks, and end-of-test queue drain checks | Converts the environment from smoke-level data checking to protocol-level checking. |
+| 2 | Extend scoreboard for RX path and full-system checks | TX path: **delivered** — per-lane `valid & ready` queueing, upper 16-bit zero check, error compare, and `check_phase` TX queue drain. |
 | 3 | Add an active/passive PIPE agent mode and a PIPE ready/backpressure sequence | Required to verify FIFO full, `rdi_flow_ctrl`, and hold-under-stall behavior in UVM. |
 | 4 | Add RX path sequences and a mirrored RDI RX scoreboard | The RTL includes `PIPE -> RDI`; current UVM does not exercise it. |
 | 5 | Compile assertion monitor or bind equivalent SVA into UVM runs | Keeps UVM aligned with CDC and handshake assumptions used by the release regression. |

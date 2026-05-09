@@ -96,9 +96,9 @@ sequenceDiagram
 | :--- | :---: | :--- |
 | Per-lane ordering | Yes | One expected queue per lane. |
 | Lower 16-bit data compare | Yes | Compares RDI payload against PIPE lower half. |
-| PIPE upper 16 bits are zero | No | Should be added for full width-conversion checking. |
-| Error propagation | No | `ucie_rdi_error_seq` drives error, but scoreboard does not compare it yet. |
-| Queue empty at end of test | No | Add UVM phase check before using as a closure gate. |
+| PIPE upper 16 bits are zero | Yes | Checked against zero-extension for accepted PIPE beats. |
+| Error propagation | Yes | Compared for each accepted lane beat vs. queued RDI expectation. |
+| Queue empty at end of test | Yes | `check_phase` fails with `SB_DRAIN` if TX queues remain non-empty. |
 | RX path | No | `pipe_rx_if.valid` is tied low. |
 | CRC | No | `crc_enable` is tied low. |
 
@@ -149,7 +149,7 @@ make -f Makefile.vcs pdf
 
 | Priority | Item |
 | :---: | :--- |
-| 1 | Add error, upper-zero, valid-ready lane gating, and queue-drain checks to the scoreboard. |
+| 1 | Bind or compile `ucie_rdi_to_pcie_pipe_bridge_assertions` into UVM runs for CDC parity with Verilator. |
 | 2 | Add active PIPE ready/backpressure control for FIFO-full and flow-control coverage. |
 | 3 | Add RX path driver, monitor hookup, and mirrored scoreboard checks. |
 | 4 | Add CRC enable sequences and a CRC predictor. |

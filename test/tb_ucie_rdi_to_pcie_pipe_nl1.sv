@@ -102,7 +102,7 @@ module tb_ucie_rdi_to_pcie_pipe_nl1 (
             pipe_rx_valid <= '0;
             pipe_rx_data <= '0;
             pipe_rx_error <= '0;
-        end else if (rdi_cycle == 32'd200) begin
+        end else if (rdi_cycle == 32'd280) begin
             cdc_mon.print_statistics();
             $display("[TEST NL1] NUM_LANES=1 smoke complete (assertions-only; no scoreboard)");
             $finish;
@@ -136,6 +136,17 @@ module tb_ucie_rdi_to_pcie_pipe_nl1 (
                 32'd90: begin
                     $display("[TEST NL1] Draining FIFO");
                     pipe_ready <= 1'b1;
+                end
+                32'd210: begin
+                    $display("[TEST NL1] RX path pulse (PIPE -> RDI, lane 0)");
+                end
+                32'd212: begin
+                    pipe_rx_valid <= 1'b1;
+                    pipe_rx_data[RDI_DATA_WIDTH-1:0] <= 16'hC0DE;
+                    pipe_rx_data[PIPE_DATA_WIDTH-1:RDI_DATA_WIDTH] <= {(PIPE_DATA_WIDTH - RDI_DATA_WIDTH) {1'b0}};
+                end
+                32'd216: begin
+                    pipe_rx_valid <= 1'b0;
                 end
                 default: ;
             endcase

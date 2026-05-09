@@ -53,7 +53,7 @@ Reference scoreboard: `test/tb_ucie_rdi_to_pcie_pipe_scoreboard.sv` — queues e
 
 ## NUM_LANES=1 smoke
 
-Source: `tb_ucie_rdi_to_pcie_pipe_nl1`, clocks from `sim_main_nl1.cpp` (same coarse stepping as `sim_main.cpp`). **Assertions-only** — verifies **`NUM_LANES == 1`** widths/parameters and CDC monitors without the dual-clock scoreboard (scoreboard remains on the main TB where stimulus aligns with its sampling model). Ends at **`rdi_cycle == 60`** with **`[TEST NL1]`** messages.
+Source: `tb_ucie_rdi_to_pcie_pipe_nl1`, clocks from `sim_main_nl1.cpp` (same coarse stepping as `sim_main.cpp`). **Assertions-only** — verifies **`NUM_LANES == 1`** widths/parameters and CDC monitors without the dual-clock scoreboard (scoreboard remains on the main TB where stimulus aligns with its sampling model). Includes a **deep TX FIFO push** under stalled **`pipe_ready`**, **drain**, and a minimal **PIPE RX → RDI** beat. Ends at **`rdi_cycle == 280`** with **`[TEST NL1]`** messages.
 
 ## Assertion / monitoring policy
 
@@ -68,7 +68,7 @@ The UVM environment is intentionally separated from the Verilator smoke regressi
 |----------|---------------|------------------------|
 | RDI active agent | Drives fixed-width 4-lane TX transactions | Add parameter/config object for lane and data widths. |
 | PIPE passive agent | Monitors TX PIPE accepts | Add controlled ready/backpressure behavior. |
-| Scoreboard | Per-lane TX queues, lower-16-bit data compare | Add lane-level `valid & ready` gating, zero-extension check, error compare, and queue-empty check. |
+| Scoreboard | Per-lane TX queues, **`valid & ready`** gating, lower **and upper (zero)** 16-bit data compare, **error** compare, **`check_phase` queue drain** | Functional coverage; RX path scoreboard; CRC predictor |
 | RX path | DUT and interfaces wired, stimulus idle | Add active PIPE RX driver and RDI RX monitor/scoreboard. |
 | CRC | Disabled in UVM top | Add CRC enable sequence and predictor. |
 | Functional coverage | Not present | Add coverage groups for lane mask, error, backpressure, width conversion, RX/TX direction, and CRC. |
@@ -95,13 +95,13 @@ The UVM environment is intentionally separated from the Verilator smoke regressi
 
 Priorities for higher confidence:
 
-1. **Corner cases** — Deeper pointer-wrap stimulus ( **`NUM_LANES=1`** smoke is in-tree).  
-2. **Coverage closure** — Publish thresholds / reviewed **`coverage.info`** summaries (replace README `%` placeholders).  
-3. **UVM closure** — Complete the scoreboard gaps and add functional coverage described in `docs/uvm_verification.md`.  
+1. **Corner cases** — Deeper pointer-wrap stimulus ( **`NUM_LANES=1`** smoke exercises wrap + minimal RX).  
+2. **Coverage closure** — Keep **`README.md`** verification metrics aligned with `make regress_cov` / `make coverage_summary`; treat **~95% overall line coverage** on RTL+TB as the current documented baseline until formal or richer stimulus lands.  
+3. **UVM closure** — Functional coverage, PIPE backpressure, RX path, CRC-in-UVM, and assertion bind (scoreboard strengthening is partially delivered — see `docs/uvm_verification.md`).  
 4. **Formal** — Async FIFO invariants + handshake properties (tool-specific).  
 5. **PIPE policy (optional)** — Strict **`valid`⇒data hold** RTL + monitor if integrators require it.
 
-**Delivered in-tree:** Scoreboard; FIFO stress + CRC checker in TB; **`regress_cov`** flow.
+**Delivered in-tree:** Scoreboard; FIFO stress + CRC checker in TB; **`regress_cov`** flow; NL1 deep FIFO + RX pulse; UVM scoreboard drain check, per-lane **`valid & ready`** queueing, zero-extension and **error** compare on PIPE observations.
 
 ## Exit criteria (smoke + lint)
 
