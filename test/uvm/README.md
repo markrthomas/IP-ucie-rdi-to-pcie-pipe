@@ -7,7 +7,9 @@ geometry: "margin=1in"
 
 # UVM Verification Environment for UCIe RDI to PCIe PIPE Bridge
 
-This directory contains a full Universal Verification Methodology (UVM) environment designed for the bidirectional UCIe RDI to PCIe PIPE bridge IP. It is optimized for use with Synopsys VCS and mirrors the coverage of the original SystemVerilog testbench.
+This directory contains the Universal Verification Methodology (UVM) environment for the bridge IP. It is optimized for Synopsys VCS and currently provides a TX-path UVM smoke/regression layer. The open-source release gate remains the Verilator testbench in the repository root.
+
+For the detailed verification guide, current limitations, and closure plan, see `../../docs/uvm_verification.md`.
 
 ## 1. Architecture Overview
 
@@ -38,9 +40,24 @@ graph TD
 
 ### Components
 
-*   **RDI Agent**: Handles the UCIe 1.0 RDI protocol. It drives transactions from sequences and monitors the interface to provide transaction-level data to the scoreboard.
-*   **PIPE Agent**: Monitors the PCIe Gen 4 PIPE interface. In this environment, it operates in passive mode for the transmit path (monitoring the IP output).
-*   **Scoreboard**: Performs end-to-end data integrity checks. It maintains per-lane queues to account for the dual-clock domain crossing and variable latencies.
+| Component | Mode | Responsibility |
+| :--- | :--- | :--- |
+| `ucie_rdi_agent` | Active | Drives RDI TX transactions, monitors accepted RDI beats, and publishes expected items. |
+| `pcie_pipe_agent` | Passive | Monitors PIPE TX accepted beats from the DUT. |
+| `ucie_rdi_pcie_scoreboard` | Passive | Maintains per-lane TX expectation queues and compares observed PIPE data against RDI input data. |
+| `uvm_test_top` | Static top | Generates clocks/reset, instantiates DUT/interfaces, binds virtual interfaces, and starts UVM. |
+
+### Current Scope
+
+| Area | Status |
+| :--- | :--- |
+| Simulator | VCS with UVM 1.2 (`Makefile.vcs`) |
+| Parameters | Fixed in UVM at 4 lanes, 16-bit RDI, 32-bit PIPE |
+| TX path | Stimulated and checked at smoke level |
+| RX path | Interfaces are instantiated but RX stimulus is tied idle |
+| CRC | Disabled in `uvm_test_top` |
+| PIPE backpressure | `pipe_tx_if.ready` held high |
+| Assertions | Not included in the UVM compile list |
 
 ## 2. Data Flow & Scoreboarding
 
@@ -55,7 +72,35 @@ The bridge converts 16-bit RDI data (100MHz) to 32-bit PIPE data (150MHz).
 4.  **Matching**:
     *   The scoreboard receives an RDI transaction and pushes it into a `tx_exp_q[lane]` queue.
     *   When a PIPE transaction arrives, the scoreboard pops the corresponding RDI entry from the queue.
-    *   It performs a comparison, accounting for the **zero-extension** (RDI 16-bit -> PIPE 32-bit).
+    *   It compares the lower 16 PIPE bits with the matching RDI lane payload.
+
+```mermaid
+sequenceDiagram
+    participant Seq as RDI sequence
+    participant Drv as RDI driver
+    participant DUT as Bridge TX FIFO
+    participant RM as RDI monitor
+    participant PM as PIPE monitor
+    participant SB as Scoreboard
+    Seq->>Drv: ucie_rdi_transaction
+    Drv->>DUT: valid/data/error
+    RM->>SB: accepted RDI beat
+    DUT->>PM: accepted PIPE beat
+    PM->>SB: observed PIPE beat
+    SB->>SB: per-lane queue pop and compare
+```
+
+### Scoreboard Checks and Known Gaps
+
+| Check | Implemented | Notes |
+| :--- | :---: | :--- |
+| Per-lane ordering | Yes | One expected queue per lane. |
+| Lower 16-bit data compare | Yes | Compares RDI payload against PIPE lower half. |
+| PIPE upper 16 bits are zero | No | Should be added for full width-conversion checking. |
+| Error propagation | No | `ucie_rdi_error_seq` drives error, but scoreboard does not compare it yet. |
+| Queue empty at end of test | No | Add UVM phase check before using as a closure gate. |
+| RX path | No | `pipe_rx_if.valid` is tied low. |
+| CRC | No | `crc_enable` is tied low. |
 
 ## 3. Test Library
 
@@ -68,7 +113,16 @@ The bridge converts 16-bit RDI data (100MHz) to 32-bit PIPE data (150MHz).
 *   `ucie_rdi_single_lane_seq`: Targets Lane 0.
 *   `ucie_rdi_multi_lane_seq`: Drives all 4 lanes simultaneously.
 *   `ucie_rdi_error_seq`: Verifies propagation of the `rdi_error` bit.
-*   `ucie_rdi_flow_ctrl_seq`: Sends 20 consecutive beats to test FIFO backpressure.
+*   `ucie_rdi_flow_ctrl_seq`: Sends 20 consecutive lane-1 beats. PIPE ready is not stalled today, so this is repeated-traffic stimulus rather than a full FIFO-backpressure test.
+
+### Sequence Matrix
+
+| Sequence | Lane mask | Data pattern | Error mask | Primary intent |
+| :--- | :---: | :--- | :---: | :--- |
+| `ucie_rdi_single_lane_seq` | `0001` | `64'hDEAD` | `0000` | Basic lane-0 TX transport. |
+| `ucie_rdi_multi_lane_seq` | `1111` | `64'hDDDD_CCCC_BBBB_AAAA` | `0000` | All-lane packing and independent lane queues. |
+| `ucie_rdi_error_seq` | `0100` | `64'hEEEE_1234_0000_0000` | `0100` | Error propagation stimulus. |
+| `ucie_rdi_flow_ctrl_seq` | `0010` | `64'h0000_0000_1234_0000` | `0000` | Repeated lane-1 FIFO traffic. |
 
 ## 4. Usage Instructions
 
@@ -90,3 +144,13 @@ The `Makefile.vcs` includes a target to convert this Markdown file into a PDF do
 ```bash
 make -f Makefile.vcs pdf
 ```
+
+## 5. Extension Priorities
+
+| Priority | Item |
+| :---: | :--- |
+| 1 | Add error, upper-zero, valid-ready lane gating, and queue-drain checks to the scoreboard. |
+| 2 | Add active PIPE ready/backpressure control for FIFO-full and flow-control coverage. |
+| 3 | Add RX path driver, monitor hookup, and mirrored scoreboard checks. |
+| 4 | Add CRC enable sequences and a CRC predictor. |
+| 5 | Add functional coverage groups for lane, error, backpressure, RX/TX direction, and CRC scenarios. |

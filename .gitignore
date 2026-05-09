@@ -14,3 +14,9 @@ xsim.dir/
 transcript
 xsim_*.log
 .codex
+
+# Local scratch (not part of the IP release)
+/NOTES
+
+# Built by `make -f test/uvm/Makefile.vcs pdf` (pandoc)
+test/uvm/UVM_README.pdf

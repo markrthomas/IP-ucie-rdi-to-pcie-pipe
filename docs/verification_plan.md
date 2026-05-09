@@ -21,6 +21,16 @@ make clean        # Remove obj_dir, obj_dir_cov, obj_dir_nl1, coverage.info, …
 
 GitHub Actions runs **`make regress`** on push/PR to `main` / `master`, then **`make verilator_cov`** (artifact: **`coverage.info`** when `verilator_coverage` is available) and **`make verilator_nl1`**. See `.github/workflows/verilator.yml`.
 
+## Verification environment map
+
+| Environment | Location | Simulator | Current role | Release-gate status |
+|-------------|----------|-----------|--------------|---------------------|
+| Verilator smoke | Root `Makefile`, `test/tb_ucie_rdi_to_pcie_pipe_bridge.sv` | Verilator | Fast RTL lint, smoke stimulus, scoreboard, CRC lane-0 mirror, FIFO stress | Current CI/release gate |
+| NUM_LANES=1 smoke | Root `Makefile`, `test/tb_ucie_rdi_to_pcie_pipe_nl1.sv` | Verilator | Parameter-width smoke with assertion monitor | Current CI side gate |
+| UVM | `test/uvm/` | VCS/UVM 1.2 | TX-path UVM smoke and extensibility scaffold | Manual, not in open-source CI |
+
+Detailed UVM architecture, component roles, sequence matrix, and closure gaps are documented in `docs/uvm_verification.md`.
+
 ## Smoke testbench
 
 Source: `test/tb_ucie_rdi_to_pcie_pipe_bridge.sv`, clocks from `sim_main.cpp`.
@@ -50,6 +60,19 @@ Source: `tb_ucie_rdi_to_pcie_pipe_nl1`, clocks from `sim_main_nl1.cpp` (same coa
 - **RDI:** Data and per-lane `rdi_error` are expected stable while `rdi_valid` stays asserted (matches typical source behavior).
 - **PIPE:** The bridge may update registered `pipe_data` / `pipe_error` while `pipe_valid && !pipe_ready` (see DUT `always_ff`). There is **no** “stable while valid” check on PIPE data in the monitor so simulation stays aligned with the RTL.
 
+## UVM verification focus
+
+The UVM environment is intentionally separated from the Verilator smoke regression because it depends on VCS and UVM 1.2. It should be treated as the path for constrained-random growth, coverage closure, and reusable verification IP.
+
+| UVM area | Present today | Recommended next check |
+|----------|---------------|------------------------|
+| RDI active agent | Drives fixed-width 4-lane TX transactions | Add parameter/config object for lane and data widths. |
+| PIPE passive agent | Monitors TX PIPE accepts | Add controlled ready/backpressure behavior. |
+| Scoreboard | Per-lane TX queues, lower-16-bit data compare | Add lane-level `valid & ready` gating, zero-extension check, error compare, and queue-empty check. |
+| RX path | DUT and interfaces wired, stimulus idle | Add active PIPE RX driver and RDI RX monitor/scoreboard. |
+| CRC | Disabled in UVM top | Add CRC enable sequence and predictor. |
+| Functional coverage | Not present | Add coverage groups for lane mask, error, backpressure, width conversion, RX/TX direction, and CRC. |
+
 ## Recent verification-related changes (maintenance log)
 
 | Area | Change |
@@ -74,8 +97,9 @@ Priorities for higher confidence:
 
 1. **Corner cases** — Deeper pointer-wrap stimulus ( **`NUM_LANES=1`** smoke is in-tree).  
 2. **Coverage closure** — Publish thresholds / reviewed **`coverage.info`** summaries (replace README `%` placeholders).  
-3. **Formal** — Async FIFO invariants + handshake properties (tool-specific).  
-4. **PIPE policy (optional)** — Strict **`valid`⇒data hold** RTL + monitor if integrators require it.
+3. **UVM closure** — Complete the scoreboard gaps and add functional coverage described in `docs/uvm_verification.md`.  
+4. **Formal** — Async FIFO invariants + handshake properties (tool-specific).  
+5. **PIPE policy (optional)** — Strict **`valid`⇒data hold** RTL + monitor if integrators require it.
 
 **Delivered in-tree:** Scoreboard; FIFO stress + CRC checker in TB; **`regress_cov`** flow.
 
