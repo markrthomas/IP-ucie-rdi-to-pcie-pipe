@@ -1,5 +1,5 @@
 
-.PHONY: all check ci clean coverage_summary docs_check docs_pdf help lint nl1 quick regress regress_all regress_cov regress_nl1 repo_status simv smoke test uvm uvm_compile uvm_pdf uvm_run verilator verilator_cov verilator_debug verilator_nl1 vivado wave xsim questa
+.PHONY: all check ci clean coverage coverage_summary docs_check docs_pdf formal help lint nl1 quick regress regress_all regress_cov regress_nl1 repo_status simv smoke test uvm uvm_compile uvm_pdf uvm_run verilator verilator_cov verilator_debug verilator_nl1 vivado wave xsim questa
 
 VERILATOR ?= $(shell command -v verilator_bin 2>/dev/null || command -v verilator 2>/dev/null)
 VERILATOR_ROOT := $(shell if [ -n "$(VERILATOR)" ]; then realpath "$$(dirname "$(VERILATOR)")/../share/verilator"; fi)
@@ -32,6 +32,16 @@ smoke: verilator
 test: regress
 
 nl1: regress_nl1
+
+# Standard DV gate aliases (consistent with other RTL repos).
+# coverage: alias for regress_cov (Verilator line coverage).
+coverage: regress_cov
+
+# formal: no SymbiYosys .sby property files yet; see docs/verification_plan.md.
+formal:
+	@echo "[FORMAL] No SymbiYosys .sby property files yet for this repo."
+	@echo "         Recommended next: async FIFO invariants + handshake properties."
+	@echo "         See docs/verification_plan.md (Coverage and formal section)."
 
 # Full local confidence run. This is intentionally heavier than CI's first gate.
 ci: regress regress_cov regress_nl1 coverage_summary docs_check
