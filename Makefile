@@ -1,5 +1,5 @@
 
-.PHONY: all check ci clean coverage coverage_summary docs_check docs_pdf formal help lint nl1 quick regress regress_all regress_cov regress_nl1 repo_status simv smoke test uvm uvm_compile uvm_pdf uvm_run verilator verilator_cov verilator_debug verilator_nl1 vivado wave xsim questa
+.PHONY: all check ci clean coverage coverage_summary docs_check docs_pdf formal help lint nl1 quick regress regress_all regress_cov regress_nl1 repo_status sim simv smoke test uvm uvm_compile uvm_pdf uvm_run verilator verilator_cov verilator_debug verilator_nl1 vivado wave xsim questa
 
 VERILATOR ?= $(shell command -v verilator_bin 2>/dev/null || command -v verilator 2>/dev/null)
 VERILATOR_ROOT := $(shell if [ -n "$(VERILATOR)" ]; then realpath "$$(dirname "$(VERILATOR)")/../share/verilator"; fi)
@@ -50,6 +50,9 @@ regress_all: ci
 
 # Release regression (lint + Verilator smoke); CI runs this target.
 regress: lint verilator
+
+# Standard DV alias (DV_STANDARDS.md): sim = Verilator OSS sim.
+sim: verilator
 
 # Lint + Verilator with coverage (writes obj_dir_cov/coverage.dat; optional coverage.info).
 regress_cov: lint verilator_cov
