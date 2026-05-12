@@ -1,0 +1,4 @@
+# SymbiYosys build output directories
+fifo_cdc/
+fifo_cdc_bmc/
+fifo_cdc_cover/

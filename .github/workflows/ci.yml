@@ -1,4 +1,4 @@
-name: Verilator
+name: CI
 
 on:
   push:

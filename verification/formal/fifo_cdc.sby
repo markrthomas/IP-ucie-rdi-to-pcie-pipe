@@ -1,0 +1,37 @@
+# fifo_cdc.sby — SymbiYosys formal proof for ucie_rdi_fifo_cdc
+#
+# Tasks:
+#   bmc   — safety: no overflow, no underflow, output stability
+#   cover — reachability: FIFO fills to full, then drains to empty
+#
+# Run all: sby -f fifo_cdc.sby
+# One task: sby -f fifo_cdc.sby bmc
+
+[tasks]
+bmc
+cover
+
+[options]
+bmc:   mode bmc
+cover: mode cover
+depth 40
+
+[engines]
+smtbmc
+
+# Note: uses ucie_fifo_cdc_model.v (plain-Verilog equivalent of
+# src/ucie_rdi_fifo_cdc.sv) because Yosys does not yet support
+# SV struct literals or 'return' inside functions.
+
+[script]
+read -sv fifo_cdc_props.sv ucie_fifo_cdc_model.v
+hierarchy -top fifo_cdc_props
+proc
+opt
+memory_map
+flatten
+opt
+
+[files]
+fifo_cdc_props.sv
+ucie_fifo_cdc_model.v

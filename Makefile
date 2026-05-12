@@ -37,11 +37,18 @@ nl1: regress_nl1
 # coverage: alias for regress_cov (Verilator line coverage).
 coverage: regress_cov
 
-# formal: no SymbiYosys .sby property files yet; see docs/verification_plan.md.
+# formal: SymbiYosys formal proofs in verification/formal/.
+#         Checks wr_ready/wr_full polarity and output stability (rd_valid,
+#         rd_data, rd_error held when rd_ready is low) for ucie_rdi_fifo_cdc.
+#         Uses a plain-Verilog model (struct literals / 'return' unsupported by Yosys).
 formal:
-	@echo "[FORMAL] No SymbiYosys .sby property files yet for this repo."
-	@echo "         Recommended next: async FIFO invariants + handshake properties."
-	@echo "         See docs/verification_plan.md (Coverage and formal section)."
+	@if command -v sby >/dev/null 2>&1; then \
+		$(MAKE) -C $(CURDIR)/verification/formal; \
+	else \
+		echo "[FORMAL] sby not found; install SymbiYosys (OSS CAD Suite) to run formal"; \
+		echo "         Properties are in verification/formal/fifo_cdc_props.sv"; \
+		exit 0; \
+	fi
 
 # Full local confidence run. This is intentionally heavier than CI's first gate.
 ci: regress regress_cov regress_nl1 coverage_summary docs_check
