@@ -10,8 +10,8 @@ module uvm_test_top;
     logic rdi_clk;
     logic pipe_clk;
     logic rst_n;
-    logic [3:0] crc_enable;
-    logic [3:0] crc_error;
+    logic [NUM_LANES-1:0] crc_enable;
+    logic [NUM_LANES-1:0] crc_error;
     localparam logic [31:0] CRC_RESIDUE = 32'h1704_7432;
 
     // --- Clock Generation ---
@@ -32,11 +32,11 @@ module uvm_test_top;
     end
 
     // --- Interfaces ---
-    ucie_rdi_if #(.DATA_WIDTH(16), .NUM_LANES(4)) rdi_tx_if (.clk(rdi_clk), .rst_n(rst_n));
-    pcie_pipe_if #(.DATA_WIDTH(32), .NUM_LANES(4)) pipe_tx_if (.clk(pipe_clk), .rst_n(rst_n));
-    
-    ucie_rdi_if #(.DATA_WIDTH(16), .NUM_LANES(4)) rdi_rx_if (.clk(rdi_clk), .rst_n(rst_n));
-    pcie_pipe_if #(.DATA_WIDTH(32), .NUM_LANES(4)) pipe_rx_if (.clk(pipe_clk), .rst_n(rst_n));
+    ucie_rdi_if #(.DATA_WIDTH(RDI_DATA_WIDTH), .NUM_LANES(NUM_LANES)) rdi_tx_if (.clk(rdi_clk), .rst_n(rst_n));
+    pcie_pipe_if #(.DATA_WIDTH(PIPE_DATA_WIDTH), .NUM_LANES(NUM_LANES)) pipe_tx_if (.clk(pipe_clk), .rst_n(rst_n));
+
+    ucie_rdi_if #(.DATA_WIDTH(RDI_DATA_WIDTH), .NUM_LANES(NUM_LANES)) rdi_rx_if (.clk(rdi_clk), .rst_n(rst_n));
+    pcie_pipe_if #(.DATA_WIDTH(PIPE_DATA_WIDTH), .NUM_LANES(NUM_LANES)) pipe_rx_if (.clk(pipe_clk), .rst_n(rst_n));
 
     function automatic logic [31:0] tb_crc32_step(
         input logic [31:0] data_in,
@@ -79,9 +79,9 @@ module uvm_test_top;
 
     // --- DUT Instantiation ---
     ucie_rdi_to_pcie_pipe_bridge #(
-        .NUM_LANES(4),
-        .RDI_DATA_WIDTH(16),
-        .PIPE_DATA_WIDTH(32),
+        .NUM_LANES(NUM_LANES),
+        .RDI_DATA_WIDTH(RDI_DATA_WIDTH),
+        .PIPE_DATA_WIDTH(PIPE_DATA_WIDTH),
         .BUFFER_DEPTH(16)
     ) dut (
         .rst_n(rst_n),
@@ -118,9 +118,9 @@ module uvm_test_top;
     );
 
     ucie_rdi_to_pcie_pipe_bridge_assertions #(
-        .NUM_LANES(4),
-        .RDI_DATA_WIDTH(16),
-        .PIPE_DATA_WIDTH(32)
+        .NUM_LANES(NUM_LANES),
+        .RDI_DATA_WIDTH(RDI_DATA_WIDTH),
+        .PIPE_DATA_WIDTH(PIPE_DATA_WIDTH)
     ) cdc_mon (
         .rst_n(rst_n),
         .rdi_clk(rdi_clk),
@@ -152,10 +152,10 @@ module uvm_test_top;
         uvm_config_db#(virtual pcie_pipe_if)::set(null, "*.env.pipe_rx_mon*", "vif", pipe_rx_if);
         
         // Default ready signals
-        pipe_tx_if.ready = 4'b1111;
-        rdi_rx_if.ready = 4'b1111;
-        pipe_rx_if.valid = 4'b0000;
-        crc_enable = 4'b0000;
+        pipe_tx_if.ready = '1;
+        rdi_rx_if.ready = '1;
+        pipe_rx_if.valid = '0;
+        crc_enable = '0;
 
         run_test();
     end

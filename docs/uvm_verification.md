@@ -7,7 +7,7 @@ This guide describes the UVM environment in `test/uvm/` as it exists in this rep
 | Area | Current UVM status | Notes |
 |------|--------------------|-------|
 | Simulator target | Synopsys VCS | Driven by `test/uvm/Makefile.vcs` with `-ntb_opts uvm-1.2`. |
-| DUT parameters | Fixed 4 lanes, 16-bit RDI, 32-bit PIPE, FIFO depth 16 | The RTL is parameterized; the UVM transaction classes and scoreboard are currently fixed-width. |
+| DUT parameters | 4 lanes, 16-bit RDI, 32-bit PIPE, FIFO depth 16 | Lane/data geometry is centralized as parameters in `ucie_rdi_pcie_pkg` (`NUM_LANES`, `RDI_DATA_WIDTH`, `PIPE_DATA_WIDTH`, derived `RDI_BUS_WIDTH`/`PIPE_BUS_WIDTH`). Transaction widths, scoreboard loops/slices, and coverage sample ports derive from these, and `uvm_test_top` passes the same values into the interfaces and DUT. Fixed stimulus vectors in `seq_lib` and covergroup bins remain 4-lane specific. |
 | TX path (`RDI -> PIPE`) | Stimulated and scoreboarding enabled | Active RDI agent drives requests; passive PIPE monitor observes accepted beats. |
 | RX path (`PIPE -> RDI`) | Wired with passive monitors and a smoke RX driver, with basic checking | `uvm_test_top` instantiates RX interfaces, binds passive RX monitors, and the sanity test now runs a small PIPE RX sequence through `pipe_rx_agent`. |
 | CRC | Enabled for the smoke sequence | `uvm_test_top` now toggles `crc_enable` for a lane-0 CRC smoke run and mirrors the residue check. |
@@ -85,7 +85,7 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 | `test/uvm/uvm_test_top.sv` | `uvm_test_top` | Generates clocks/reset, instantiates interfaces and DUT, binds virtual interfaces with `uvm_config_db`, starts UVM. |
 | `test/uvm/ucie_rdi_if.sv` | `ucie_rdi_if` | RDI TX/RX signal bundle with driver and monitor clocking blocks. |
 | `test/uvm/pcie_pipe_if.sv` | `pcie_pipe_if` | PIPE TX/RX signal bundle with driver and monitor clocking blocks. |
-| `test/uvm/ucie_rdi_pcie_pkg.sv` | transaction classes | Fixed-width RDI and PIPE sequence items for 4 lanes. |
+| `test/uvm/ucie_rdi_pcie_pkg.sv` | transaction classes | RDI and PIPE sequence items whose widths derive from the package parameters (`NUM_LANES`, `RDI_DATA_WIDTH`, `PIPE_DATA_WIDTH`). |
 | `test/uvm/ucie_rdi_pcie_pkg.sv` | `ucie_rdi_driver` | Drives RDI TX `valid`, `data`, and `error` through `ucie_rdi_if.drv_cb`. |
 | `test/uvm/ucie_rdi_pcie_pkg.sv` | `ucie_rdi_monitor` | Publishes RDI TX transactions when at least one lane completes `valid & ready`. |
 | `test/uvm/ucie_rdi_pcie_pkg.sv` | `pcie_pipe_monitor` | Publishes PIPE TX transactions when at least one lane completes `valid & ready`. |
@@ -118,7 +118,7 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 
 | Priority | Work item | Why it matters |
 |----------|-----------|----------------|
-| 1 | Make transaction widths parameter-aware or centralize lane/data constants in a config object | Prevents divergence from RTL parameters and enables `NUM_LANES=1` UVM tests. |
+| 1 | Make transaction widths parameter-aware or centralize lane/data constants in a config object | **Delivered (centralization):** lane/data geometry lives in `ucie_rdi_pcie_pkg` parameters that drive the transaction widths, scoreboard slicing, coverage sample ports, and (via `uvm_test_top`) the interface/DUT instantiations. Remaining for a `NUM_LANES` sweep: generalize `seq_lib` stimulus vectors and covergroup bins. |
 | 2 | Extend scoreboard for RX path and full-system checks | TX path: **delivered** — per-lane `valid & ready` queueing, upper 16-bit zero check, error compare, and `check_phase` TX queue drain. RX path now has smoke-driver/queueing scaffolding. |
 | 3 | Expand PIPE backpressure coverage and decouple passive vs. active ready control | Required to verify FIFO full, `rdi_flow_ctrl`, and hold-under-stall behavior in UVM. |
 | 4 | Expand RX path sequences and mirrored RDI RX scoreboard | The RTL includes `PIPE -> RDI`; current UVM now exercises a smoke sequence but still needs deeper RX closure. |

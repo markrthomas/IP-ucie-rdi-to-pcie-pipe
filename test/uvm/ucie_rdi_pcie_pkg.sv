@@ -12,13 +12,31 @@ package ucie_rdi_pcie_pkg;
     `uvm_analysis_imp_decl(_rxrdi)
     `uvm_analysis_imp_decl(_rxpipe)
 
+    // ------------------------------------------------------------------
+    // Centralized DUT dimensions -- single source of truth for the UVM
+    // environment. The per-lane names mirror the RTL parameters exactly
+    // (ucie_rdi_to_pcie_pipe_bridge #(.NUM_LANES, .RDI_DATA_WIDTH,
+    // .PIPE_DATA_WIDTH)); uvm_test_top passes these same values into the
+    // interfaces and the DUT, so transaction/scoreboard widths cannot
+    // silently diverge from the DUT. Change lane/data geometry here.
+    //
+    // Note: the fixed stimulus vectors in seq_lib (e.g. valid == 4'b0001)
+    // and the covergroup bins remain 4-lane specific; a NUM_LANES sweep
+    // would additionally require generalizing those.
+    // ------------------------------------------------------------------
+    parameter int NUM_LANES       = 4;
+    parameter int RDI_DATA_WIDTH  = 16;  // bits per lane on the RDI side
+    parameter int PIPE_DATA_WIDTH = 32;  // bits per lane on the PIPE side
+    parameter int RDI_BUS_WIDTH   = NUM_LANES * RDI_DATA_WIDTH;
+    parameter int PIPE_BUS_WIDTH  = NUM_LANES * PIPE_DATA_WIDTH;
+
     // --- UCIe RDI Transaction ---
     class ucie_rdi_transaction extends uvm_sequence_item;
-        rand logic [3:0]  valid;
-        rand logic [63:0] data; // 4 lanes * 16 bits
-        rand logic [3:0]  error;
-        logic [3:0]       ready;
-        logic [3:0]       flow_ctrl;
+        rand logic [NUM_LANES-1:0]     valid;
+        rand logic [RDI_BUS_WIDTH-1:0] data; // NUM_LANES * RDI_DATA_WIDTH bits
+        rand logic [NUM_LANES-1:0]     error;
+        logic [NUM_LANES-1:0]          ready;
+        logic [NUM_LANES-1:0]          flow_ctrl;
 
         `uvm_object_utils_begin(ucie_rdi_transaction)
             `uvm_field_int(valid,     UVM_ALL_ON)
@@ -35,10 +53,10 @@ package ucie_rdi_pcie_pkg;
 
     // --- PCIe PIPE Transaction ---
     class pcie_pipe_transaction extends uvm_sequence_item;
-        rand logic [3:0]   valid;
-        rand logic [127:0] data; // 4 lanes * 32 bits
-        rand logic [3:0]   error;
-        logic [3:0]        ready;
+        rand logic [NUM_LANES-1:0]      valid;
+        rand logic [PIPE_BUS_WIDTH-1:0] data; // NUM_LANES * PIPE_DATA_WIDTH bits
+        rand logic [NUM_LANES-1:0]      error;
+        logic [NUM_LANES-1:0]           ready;
 
         `uvm_object_utils_begin(pcie_pipe_transaction)
             `uvm_field_int(valid, UVM_ALL_ON)
@@ -54,7 +72,7 @@ package ucie_rdi_pcie_pkg;
 
     // --- PIPE Ready Control Transaction ---
     class pcie_pipe_ready_transaction extends uvm_sequence_item;
-        rand logic [3:0] ready;
+        rand logic [NUM_LANES-1:0] ready;
         rand int unsigned hold_cycles;
 
         constraint c_hold_cycles { hold_cycles inside {[1:32]}; }
@@ -216,7 +234,7 @@ package ucie_rdi_pcie_pkg;
     // --- PIPE Ready Driver ---
     class pcie_pipe_ready_driver extends uvm_driver #(pcie_pipe_ready_transaction);
         virtual pcie_pipe_if vif;
-        covergroup cg_ready with function sample(logic [3:0] ready, int unsigned hold_cycles);
+        covergroup cg_ready with function sample(logic [NUM_LANES-1:0] ready, int unsigned hold_cycles);
             option.per_instance = 1;
             cp_ready: coverpoint ready {
                 bins all_low = {4'b0000};
@@ -345,7 +363,7 @@ package ucie_rdi_pcie_pkg;
 
         `uvm_component_utils(ucie_rdi_pcie_coverage)
 
-        covergroup cg_rdi with function sample(logic [3:0] valid, logic [3:0] error, logic [3:0] flow_ctrl);
+        covergroup cg_rdi with function sample(logic [NUM_LANES-1:0] valid, logic [NUM_LANES-1:0] error, logic [NUM_LANES-1:0] flow_ctrl);
             option.per_instance = 1;
             cp_valid: coverpoint valid {
                 bins single[] = {4'b0001, 4'b0010, 4'b0100, 4'b1000};
@@ -362,7 +380,7 @@ package ucie_rdi_pcie_pkg;
             valid_x_error: cross cp_valid, cp_error;
         endgroup
 
-        covergroup cg_pipe with function sample(logic [3:0] valid, logic [3:0] error);
+        covergroup cg_pipe with function sample(logic [NUM_LANES-1:0] valid, logic [NUM_LANES-1:0] error);
             option.per_instance = 1;
             cp_valid: coverpoint valid {
                 bins single[] = {4'b0001, 4'b0010, 4'b0100, 4'b1000};
@@ -441,8 +459,8 @@ package ucie_rdi_pcie_pkg;
         uvm_analysis_imp_rxpipe #(pcie_pipe_transaction, ucie_rdi_pcie_scoreboard) imp_rx_pipe;
 
         // Expectation queues per lane
-        ucie_rdi_transaction tx_exp_q[4][$];
-        ucie_rdi_transaction rx_exp_q[4][$];
+        ucie_rdi_transaction tx_exp_q[NUM_LANES][$];
+        ucie_rdi_transaction rx_exp_q[NUM_LANES][$];
 
         `uvm_component_utils(ucie_rdi_pcie_scoreboard)
 
@@ -455,7 +473,7 @@ package ucie_rdi_pcie_pkg;
         endfunction
 
         function void write_rdi(ucie_rdi_transaction tr);
-            for (int i = 0; i < 4; i++) begin
+            for (int i = 0; i < NUM_LANES; i++) begin
                 if (tr.valid[i] && tr.ready[i]) begin
                     ucie_rdi_transaction exp = ucie_rdi_transaction::type_id::create("exp");
                     exp.copy(tr);
@@ -465,19 +483,19 @@ package ucie_rdi_pcie_pkg;
         endfunction
 
         function void write_pipe(pcie_pipe_transaction tr);
-            for (int i = 0; i < 4; i++) begin
+            for (int i = 0; i < NUM_LANES; i++) begin
                 if (tr.valid[i] && tr.ready[i]) begin
                     if (tx_exp_q[i].size() == 0) begin
                         `uvm_error("SB", $sformatf("Unexpected PIPE beat on lane %0d", i))
                     end else begin
                         ucie_rdi_transaction exp = tx_exp_q[i].pop_front();
-                        if (tr.data[i*32 +: 16] != exp.data[i*16 +: 16]) begin
+                        if (tr.data[i*PIPE_DATA_WIDTH +: RDI_DATA_WIDTH] != exp.data[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH]) begin
                             `uvm_error("SB", $sformatf("Mismatch lane %0d data: exp=%h got=%h",
-                                                      i, exp.data[i*16 +: 16], tr.data[i*32 +: 16]))
+                                                      i, exp.data[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH], tr.data[i*PIPE_DATA_WIDTH +: RDI_DATA_WIDTH]))
                         end
-                        if (tr.data[i*32+16 +: 16] !== 16'h0) begin
-                            `uvm_error("SB", $sformatf("Lane %0d: PIPE upper 16 bits not zero-extended: %h",
-                                                      i, tr.data[i*32 +: 32]))
+                        if (tr.data[i*PIPE_DATA_WIDTH+RDI_DATA_WIDTH +: (PIPE_DATA_WIDTH-RDI_DATA_WIDTH)] !== '0) begin
+                            `uvm_error("SB", $sformatf("Lane %0d: PIPE upper %0d bits not zero-extended: %h",
+                                                      i, (PIPE_DATA_WIDTH-RDI_DATA_WIDTH), tr.data[i*PIPE_DATA_WIDTH +: PIPE_DATA_WIDTH]))
                         end
                         if (tr.error[i] !== exp.error[i]) begin
                             `uvm_error("SB", $sformatf("Mismatch lane %0d error: exp=%b got=%b", i, exp.error[i], tr.error[i]))
@@ -488,14 +506,14 @@ package ucie_rdi_pcie_pkg;
         endfunction
 
         function void write_rxpipe(pcie_pipe_transaction tr);
-            for (int i = 0; i < 4; i++) begin
+            for (int i = 0; i < NUM_LANES; i++) begin
                 if (tr.valid[i] && tr.ready[i]) begin
                     ucie_rdi_transaction exp = ucie_rdi_transaction::type_id::create("rx_exp");
                     exp.valid = '0;
                     exp.ready = '0;
                     exp.data  = '0;
                     exp.error = '0;
-                    exp.data[i*16 +: 16] = tr.data[i*32 +: 16];
+                    exp.data[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH] = tr.data[i*PIPE_DATA_WIDTH +: RDI_DATA_WIDTH];
                     exp.error[i] = tr.error[i];
                     rx_exp_q[i].push_back(exp);
                 end
@@ -503,15 +521,15 @@ package ucie_rdi_pcie_pkg;
         endfunction
 
         function void write_rxrdi(ucie_rdi_transaction tr);
-            for (int i = 0; i < 4; i++) begin
+            for (int i = 0; i < NUM_LANES; i++) begin
                 if (tr.valid[i] && tr.ready[i]) begin
                     if (rx_exp_q[i].size() == 0) begin
                         `uvm_error("RX_SB", $sformatf("Unexpected RDI RX beat on lane %0d", i))
                     end else begin
                         ucie_rdi_transaction exp = rx_exp_q[i].pop_front();
-                        if (tr.data[i*16 +: 16] != exp.data[i*16 +: 16]) begin
+                        if (tr.data[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH] != exp.data[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH]) begin
                             `uvm_error("RX_SB", $sformatf("Mismatch RX lane %0d data: exp=%h got=%h",
-                                                          i, exp.data[i*16 +: 16], tr.data[i*16 +: 16]))
+                                                          i, exp.data[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH], tr.data[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH]))
                         end
                         if (tr.error[i] !== exp.error[i]) begin
                             `uvm_error("RX_SB", $sformatf("Mismatch RX lane %0d error: exp=%b got=%b",
@@ -524,7 +542,7 @@ package ucie_rdi_pcie_pkg;
 
         virtual function void check_phase(uvm_phase phase);
             super.check_phase(phase);
-            for (int i = 0; i < 4; i++) begin
+            for (int i = 0; i < NUM_LANES; i++) begin
                 if (tx_exp_q[i].size() != 0) begin
                     `uvm_error("SB_DRAIN", $sformatf("TX lane %0d: %0d expected beats still queued at end of test",
                                                      i, tx_exp_q[i].size()))

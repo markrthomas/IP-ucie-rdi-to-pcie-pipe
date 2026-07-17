@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. Version tags follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **UVM lane/data geometry centralized**: Added `NUM_LANES`, `RDI_DATA_WIDTH`, `PIPE_DATA_WIDTH`, and derived `RDI_BUS_WIDTH`/`PIPE_BUS_WIDTH` parameters to `ucie_rdi_pcie_pkg` as the single source of truth. Transaction field widths, scoreboard per-lane loops and bit slices, and coverage sample ports now derive from these parameters, and `uvm_test_top` passes the same values into the interfaces, DUT, and assertion binder — removing hard-coded `4`/`16`/`32` magic numbers so the UVM environment cannot silently diverge from the RTL parameters (UVM closure plan item 1). Values are unchanged at the default 4-lane configuration; `seq_lib` stimulus vectors and covergroup bins remain 4-lane specific.
+
 ## [1.0.5] — 2026-05-02
 
 ### Fixed
