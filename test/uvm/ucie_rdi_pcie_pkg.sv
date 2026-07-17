@@ -9,6 +9,8 @@ package ucie_rdi_pcie_pkg;
     `uvm_analysis_imp_decl(_pipe)
     `uvm_analysis_imp_decl(_covrdi)
     `uvm_analysis_imp_decl(_covpipe)
+    `uvm_analysis_imp_decl(_rxrdi)
+    `uvm_analysis_imp_decl(_rxpipe)
 
     // --- UCIe RDI Transaction ---
     class ucie_rdi_transaction extends uvm_sequence_item;
@@ -266,6 +268,76 @@ package ucie_rdi_pcie_pkg;
 
     typedef uvm_sequencer #(pcie_pipe_ready_transaction) pcie_pipe_ready_sequencer;
 
+    // --- PIPE RX Driver ---
+    class pcie_pipe_rx_driver extends uvm_driver #(pcie_pipe_transaction);
+        virtual pcie_pipe_if vif;
+
+        `uvm_component_utils(pcie_pipe_rx_driver)
+
+        function new(string name, uvm_component parent);
+            super.new(name, parent);
+        endfunction
+
+        virtual function void build_phase(uvm_phase phase);
+            super.build_phase(phase);
+            if (!uvm_config_db#(virtual pcie_pipe_if)::get(this, "", "vif", vif))
+                `uvm_fatal("RXDRV", "Could not get vif")
+        endfunction
+
+        virtual task run_phase(uvm_phase phase);
+            vif.drv_cb.valid <= '0;
+            vif.drv_cb.data  <= '0;
+            vif.drv_cb.error <= '0;
+
+            forever begin
+                seq_item_port.get_next_item(req);
+                @(vif.drv_cb);
+                vif.drv_cb.valid <= req.valid;
+                vif.drv_cb.data  <= req.data;
+                vif.drv_cb.error <= req.error;
+                while ((vif.drv_cb.valid & vif.drv_cb.ready) == 0 && vif.drv_cb.valid != 0) begin
+                    @(vif.drv_cb);
+                end
+                @(vif.drv_cb);
+                vif.drv_cb.valid <= '0;
+                seq_item_port.item_done();
+            end
+        endtask
+    endclass
+
+    typedef uvm_sequencer #(pcie_pipe_transaction) pcie_pipe_rx_sequencer;
+
+    class pcie_pipe_rx_agent extends uvm_agent;
+        pcie_pipe_rx_driver    drv;
+        pcie_pipe_rx_sequencer sqr;
+
+        `uvm_component_utils(pcie_pipe_rx_agent)
+
+        function new(string name, uvm_component parent);
+            super.new(name, parent);
+        endfunction
+
+        virtual function void build_phase(uvm_phase phase);
+            uvm_active_passive_enum mode;
+            super.build_phase(phase);
+            if (uvm_config_db#(uvm_active_passive_enum)::get(this, "", "is_active", mode)) begin
+                set_is_active(mode);
+            end else begin
+                set_is_active(UVM_PASSIVE);
+            end
+            if (get_is_active() == UVM_ACTIVE) begin
+                drv = pcie_pipe_rx_driver::type_id::create("drv", this);
+                sqr = pcie_pipe_rx_sequencer::type_id::create("sqr", this);
+            end
+        endfunction
+
+        virtual function void connect_phase(uvm_phase phase);
+            if (get_is_active() == UVM_ACTIVE) begin
+                drv.seq_item_port.connect(sqr.seq_item_export);
+            end
+        endfunction
+    endclass
+
     // --- UVM Coverage Collector ---
     class ucie_rdi_pcie_coverage extends uvm_component;
         uvm_analysis_imp_covrdi #(ucie_rdi_transaction, ucie_rdi_pcie_coverage) imp_rdi;
@@ -365,9 +437,12 @@ package ucie_rdi_pcie_pkg;
     class ucie_rdi_pcie_scoreboard extends uvm_scoreboard;
         uvm_analysis_imp_rdi #(ucie_rdi_transaction, ucie_rdi_pcie_scoreboard) imp_rdi;
         uvm_analysis_imp_pipe #(pcie_pipe_transaction, ucie_rdi_pcie_scoreboard) imp_pipe;
+        uvm_analysis_imp_rxrdi #(ucie_rdi_transaction, ucie_rdi_pcie_scoreboard) imp_rx_rdi;
+        uvm_analysis_imp_rxpipe #(pcie_pipe_transaction, ucie_rdi_pcie_scoreboard) imp_rx_pipe;
 
         // Expectation queues per lane
         ucie_rdi_transaction tx_exp_q[4][$];
+        ucie_rdi_transaction rx_exp_q[4][$];
 
         `uvm_component_utils(ucie_rdi_pcie_scoreboard)
 
@@ -375,6 +450,8 @@ package ucie_rdi_pcie_pkg;
             super.new(name, parent);
             imp_rdi = new("imp_rdi", this);
             imp_pipe = new("imp_pipe", this);
+            imp_rx_rdi = new("imp_rx_rdi", this);
+            imp_rx_pipe = new("imp_rx_pipe", this);
         endfunction
 
         function void write_rdi(ucie_rdi_transaction tr);
@@ -410,12 +487,51 @@ package ucie_rdi_pcie_pkg;
             end
         endfunction
 
+        function void write_rxpipe(pcie_pipe_transaction tr);
+            for (int i = 0; i < 4; i++) begin
+                if (tr.valid[i] && tr.ready[i]) begin
+                    ucie_rdi_transaction exp = ucie_rdi_transaction::type_id::create("rx_exp");
+                    exp.valid = '0;
+                    exp.ready = '0;
+                    exp.data  = '0;
+                    exp.error = '0;
+                    exp.data[i*16 +: 16] = tr.data[i*32 +: 16];
+                    exp.error[i] = tr.error[i];
+                    rx_exp_q[i].push_back(exp);
+                end
+            end
+        endfunction
+
+        function void write_rxrdi(ucie_rdi_transaction tr);
+            for (int i = 0; i < 4; i++) begin
+                if (tr.valid[i] && tr.ready[i]) begin
+                    if (rx_exp_q[i].size() == 0) begin
+                        `uvm_error("RX_SB", $sformatf("Unexpected RDI RX beat on lane %0d", i))
+                    end else begin
+                        ucie_rdi_transaction exp = rx_exp_q[i].pop_front();
+                        if (tr.data[i*16 +: 16] != exp.data[i*16 +: 16]) begin
+                            `uvm_error("RX_SB", $sformatf("Mismatch RX lane %0d data: exp=%h got=%h",
+                                                          i, exp.data[i*16 +: 16], tr.data[i*16 +: 16]))
+                        end
+                        if (tr.error[i] !== exp.error[i]) begin
+                            `uvm_error("RX_SB", $sformatf("Mismatch RX lane %0d error: exp=%b got=%b",
+                                                          i, exp.error[i], tr.error[i]))
+                        end
+                    end
+                end
+            end
+        endfunction
+
         virtual function void check_phase(uvm_phase phase);
             super.check_phase(phase);
             for (int i = 0; i < 4; i++) begin
                 if (tx_exp_q[i].size() != 0) begin
                     `uvm_error("SB_DRAIN", $sformatf("TX lane %0d: %0d expected beats still queued at end of test",
                                                      i, tx_exp_q[i].size()))
+                end
+                if (rx_exp_q[i].size() != 0) begin
+                    `uvm_error("RX_SB_DRAIN", $sformatf("RX lane %0d: %0d expected beats still queued at end of test",
+                                                         i, rx_exp_q[i].size()))
                 end
             end
         endfunction
@@ -425,6 +541,7 @@ package ucie_rdi_pcie_pkg;
     class ucie_rdi_pcie_env extends uvm_env;
         ucie_rdi_agent    rdi_agent;
         pcie_pipe_agent   pipe_agent;
+        pcie_pipe_rx_agent pipe_rx_agent;
         ucie_rdi_monitor  rdi_rx_mon;
         pcie_pipe_monitor pipe_rx_mon;
         ucie_rdi_pcie_coverage cov;
@@ -440,6 +557,7 @@ package ucie_rdi_pcie_pkg;
             super.build_phase(phase);
             rdi_agent  = ucie_rdi_agent::type_id::create("rdi_agent", this);
             pipe_agent = pcie_pipe_agent::type_id::create("pipe_agent", this);
+            pipe_rx_agent = pcie_pipe_rx_agent::type_id::create("pipe_rx_agent", this);
             rdi_rx_mon = ucie_rdi_monitor::type_id::create("rdi_rx_mon", this);
             pipe_rx_mon = pcie_pipe_monitor::type_id::create("pipe_rx_mon", this);
             cov        = ucie_rdi_pcie_coverage::type_id::create("cov", this);
@@ -449,6 +567,8 @@ package ucie_rdi_pcie_pkg;
         virtual function void connect_phase(uvm_phase phase);
             rdi_agent.mon.ap.connect(sb.imp_rdi);
             pipe_agent.mon.ap.connect(sb.imp_pipe);
+            pipe_rx_mon.ap.connect(sb.imp_rx_pipe);
+            rdi_rx_mon.ap.connect(sb.imp_rx_rdi);
             rdi_agent.mon.ap.connect(cov.imp_rdi);
             pipe_agent.mon.ap.connect(cov.imp_pipe);
         endfunction
@@ -474,6 +594,7 @@ package ucie_rdi_pcie_pkg;
 
         virtual function void build_phase(uvm_phase phase);
             uvm_config_db#(uvm_active_passive_enum)::set(this, "env.pipe_agent", "is_active", UVM_ACTIVE);
+            uvm_config_db#(uvm_active_passive_enum)::set(this, "env.pipe_rx_agent", "is_active", UVM_ACTIVE);
             super.build_phase(phase);
         endfunction
 
@@ -483,6 +604,7 @@ package ucie_rdi_pcie_pkg;
             ucie_rdi_error_seq      err_seq;
             ucie_rdi_flow_ctrl_seq  fc_seq;
             pcie_pipe_backpressure_seq bp_seq;
+            pcie_pipe_rx_seq        rx_seq;
 
             phase.raise_objection(this);
             
@@ -514,6 +636,10 @@ package ucie_rdi_pcie_pkg;
                     #20ns;
                     fc_seq = ucie_rdi_flow_ctrl_seq::type_id::create("fc_seq");
                     fc_seq.start(env.rdi_agent.sqr);
+                end
+                begin
+                    rx_seq = pcie_pipe_rx_seq::type_id::create("rx_seq");
+                    rx_seq.start(env.pipe_rx_agent.sqr);
                 end
             join
 

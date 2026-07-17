@@ -69,7 +69,7 @@ The UVM environment is intentionally separated from the Verilator smoke regressi
 | RDI active agent | Drives fixed-width 4-lane TX transactions | Add parameter/config object for lane and data widths. |
 | PIPE passive/active agent | Monitors TX PIPE accepts and can drive `ready` in active mode | Add richer FIFO-full/backpressure coverage and a cleaner mode switch. |
 | Scoreboard | Per-lane TX queues, **`valid & ready`** gating, lower **and upper (zero)** 16-bit data compare, **error** compare, **`check_phase` queue drain** | Functional coverage; RX path scoreboard; CRC predictor |
-| RX path | DUT, interfaces, and passive monitors wired, stimulus idle | Add active PIPE RX driver and RDI RX scoreboard. |
+| RX path | DUT, interfaces, passive monitors, and an active PIPE RX smoke path are wired | Expand RX stimulus and mirrored scoreboard checks. |
 | CRC | Disabled in UVM top | Add CRC enable sequence and predictor. |
 | Functional coverage | Initial RDI/PIPE transaction coverage present | Expand to RX/TX direction, FIFO occupancy, width conversion, and CRC. |
 
@@ -97,11 +97,11 @@ Priorities for higher confidence:
 
 1. **Corner cases** — Deeper pointer-wrap stimulus ( **`NUM_LANES=1`** smoke exercises wrap + minimal RX).  
 2. **Coverage closure** — Keep **`README.md`** verification metrics aligned with `make regress_cov` / `make coverage_summary`; treat **~95% overall line coverage** on RTL+TB as the current documented baseline until formal or richer stimulus lands.  
-3. **UVM closure** — Initial functional coverage, RX path, and CRC-in-UVM (scoreboard strengthening, assertion bind, richer PIPE backpressure, and basic transaction coverage are delivered — see `docs/uvm_verification.md`).
+3. **UVM closure** — Initial functional coverage, RX smoke path, and CRC-in-UVM (scoreboard strengthening, assertion bind, richer PIPE backpressure, and basic transaction coverage are delivered — see `docs/uvm_verification.md`).
 4. **Formal** — Async FIFO invariants + handshake properties (tool-specific).  
 5. **PIPE policy (optional)** — Strict **`valid`⇒data hold** RTL + monitor if integrators require it.
 
-**Delivered in-tree:** Scoreboard; FIFO stress + CRC checker in TB; **`regress_cov`** flow; NL1 deep FIFO + RX pulse; UVM scoreboard drain check, per-lane **`valid & ready`** queueing, zero-extension and **error** compare on PIPE observations; UVM CDC assertions/statistics bind; richer UVM PIPE backpressure sequencing; initial UVM functional coverage collector.
+**Delivered in-tree:** Scoreboard; FIFO stress + CRC checker in TB; **`regress_cov`** flow; NL1 deep FIFO + RX pulse; UVM scoreboard drain check, per-lane **`valid & ready`** queueing, zero-extension and **error** compare on PIPE observations; UVM CDC assertions/statistics bind; richer UVM PIPE backpressure sequencing; initial UVM functional coverage collector; initial RX smoke path and mirrored RX queueing.
 
 ## Exit criteria (smoke + lint)
 

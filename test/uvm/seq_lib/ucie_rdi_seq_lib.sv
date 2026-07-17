@@ -112,5 +112,35 @@ package ucie_rdi_seq_lib;
         endtask
     endclass
 
+    // --- PIPE RX Sequence ---
+    class pcie_pipe_rx_seq extends uvm_sequence #(pcie_pipe_transaction);
+        `uvm_object_utils(pcie_pipe_rx_seq)
+        function new(string name = "pcie_pipe_rx_seq"); super.new(name); endfunction
+
+        virtual task body();
+            pcie_pipe_transaction tr;
+
+            tr = pcie_pipe_transaction::type_id::create("rx_all_lanes");
+            start_item(tr);
+            if (!tr.randomize() with {
+                valid == 4'b1111;
+                data == 128'h1111_0001_2222_0002_3333_0003_4444_0004;
+                error == 4'b0000;
+            })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+
+            tr = pcie_pipe_transaction::type_id::create("rx_sparse");
+            start_item(tr);
+            if (!tr.randomize() with {
+                valid == 4'b0101;
+                data == 128'h0000_0000_CCCC_2222_0000_0000_AAAA_1111;
+                error == 4'b0100;
+            })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+        endtask
+    endclass
+
 
 endpackage
