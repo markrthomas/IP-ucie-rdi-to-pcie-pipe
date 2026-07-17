@@ -75,6 +75,32 @@ module uvm_test_top;
         .crc_enable(4'b0)
     );
 
+    ucie_rdi_to_pcie_pipe_bridge_assertions #(
+        .NUM_LANES(4),
+        .RDI_DATA_WIDTH(16),
+        .PIPE_DATA_WIDTH(32)
+    ) cdc_mon (
+        .rst_n(rst_n),
+        .rdi_clk(rdi_clk),
+        .pipe_clk(pipe_clk),
+        .rdi_valid(rdi_tx_if.valid),
+        .rdi_ready(rdi_tx_if.ready),
+        .rdi_data(rdi_tx_if.data),
+        .rdi_error(rdi_tx_if.error),
+        .pipe_valid(pipe_tx_if.valid),
+        .pipe_ready(pipe_tx_if.ready),
+        .pipe_data(pipe_tx_if.data),
+        .pipe_error(pipe_tx_if.error),
+        .pipe_rx_valid(pipe_rx_if.valid),
+        .pipe_rx_ready(pipe_rx_if.ready),
+        .pipe_rx_data(pipe_rx_if.data),
+        .pipe_rx_error(pipe_rx_if.error),
+        .rdi_rx_valid(rdi_rx_if.valid),
+        .rdi_rx_ready(rdi_rx_if.ready),
+        .rdi_rx_data(rdi_rx_if.data),
+        .rdi_rx_error(rdi_rx_if.error)
+    );
+
     // --- UVM Setup ---
     initial begin
         uvm_config_db#(virtual ucie_rdi_if)::set(null, "*.env.rdi_agent*", "vif", rdi_tx_if);
@@ -86,6 +112,10 @@ module uvm_test_top;
         pipe_rx_if.valid = 4'b0000;
 
         run_test();
+    end
+
+    final begin
+        cdc_mon.print_statistics();
     end
 
 endmodule

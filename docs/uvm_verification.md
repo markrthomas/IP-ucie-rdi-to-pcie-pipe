@@ -12,7 +12,7 @@ This guide describes the UVM environment in `test/uvm/` as it exists in this rep
 | RX path (`PIPE -> RDI`) | Wired but not stimulated or checked | `uvm_test_top` instantiates RX interfaces, ties `pipe_rx_if.valid = 0`, and keeps `rdi_rx_if.ready = 1`. |
 | CRC | Disabled | `crc_enable` is tied to `4'b0`; use the non-UVM smoke test for current CRC checking. |
 | Backpressure | PIPE TX ready is agent-controlled in the sanity test | The backpressure sequence now drives `ready` low then high; FIFO-full behavior is still a future extension because the RDI source driver remains handshake-gated. |
-| Assertions | Not compiled in UVM file list | CDC monitor/statistics are exercised by the non-UVM regression. |
+| Assertions | Compiled and active in the UVM top | CDC monitor/statistics now run in both the UVM flow and the non-UVM regression. |
 
 ## UVM block diagram
 
@@ -120,9 +120,8 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 | 2 | Extend scoreboard for RX path and full-system checks | TX path: **delivered** — per-lane `valid & ready` queueing, upper 16-bit zero check, error compare, and `check_phase` TX queue drain. |
 | 3 | Expand PIPE backpressure coverage and decouple passive vs. active ready control | Required to verify FIFO full, `rdi_flow_ctrl`, and hold-under-stall behavior in UVM. |
 | 4 | Add RX path sequences and a mirrored RDI RX scoreboard | The RTL includes `PIPE -> RDI`; current UVM does not exercise it. |
-| 5 | Compile assertion monitor or bind equivalent SVA into UVM runs | Keeps UVM aligned with CDC and handshake assumptions used by the release regression. |
-| 6 | Add functional coverage groups for lane, error, backpressure, FIFO occupancy, width conversion, and CRC enable | Provides measurable closure beyond pass/fail simulation. |
-| 7 | Add CRC sequences with scoreboard mirror or predictor | Current CRC confidence comes from the non-UVM testbench only. |
+| 5 | Add functional coverage groups for lane, error, backpressure, FIFO occupancy, width conversion, and CRC enable | Provides measurable closure beyond pass/fail simulation. |
+| 6 | Add CRC sequences with scoreboard mirror or predictor | Current CRC confidence comes from the non-UVM testbench only. |
 
 ## Run commands
 

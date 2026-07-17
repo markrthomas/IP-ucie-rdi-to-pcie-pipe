@@ -57,7 +57,7 @@ graph TD
 | RX path | Interfaces are instantiated but RX stimulus is tied idle |
 | CRC | Disabled in `uvm_test_top` |
 | PIPE backpressure | Active pipe-agent mode can drive `ready` low/high for the sanity test |
-| Assertions | Not included in the UVM compile list |
+| Assertions | Compiled and active in the UVM top |
 
 ## 2. Data Flow & Scoreboarding
 
@@ -151,8 +151,7 @@ make -f Makefile.vcs pdf
 
 | Priority | Item |
 | :---: | :--- |
-| 1 | Bind or compile `ucie_rdi_to_pcie_pipe_bridge_assertions` into UVM runs for CDC parity with Verilator. |
-| 2 | Expand PIPE ready/backpressure control into richer FIFO-full and flow-control coverage. |
-| 3 | Add RX path driver, monitor hookup, and mirrored scoreboard checks. |
-| 4 | Add CRC enable sequences and a CRC predictor. |
-| 5 | Add functional coverage groups for lane, error, backpressure, RX/TX direction, and CRC scenarios. |
+| 1 | Expand PIPE ready/backpressure control into richer FIFO-full and flow-control coverage. |
+| 2 | Add RX path driver, monitor hookup, and mirrored scoreboard checks. |
+| 3 | Add CRC enable sequences and a CRC predictor. |
+| 4 | Add functional coverage groups for lane, error, backpressure, RX/TX direction, and CRC scenarios. |

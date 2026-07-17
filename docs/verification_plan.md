@@ -27,7 +27,7 @@ GitHub Actions runs **`make regress`** on push/PR to `main` / `master`, then **`
 |-------------|----------|-----------|--------------|---------------------|
 | Verilator smoke | Root `Makefile`, `test/tb_ucie_rdi_to_pcie_pipe_bridge.sv` | Verilator | Fast RTL lint, smoke stimulus, scoreboard, CRC lane-0 mirror, FIFO stress | Current CI/release gate |
 | NUM_LANES=1 smoke | Root `Makefile`, `test/tb_ucie_rdi_to_pcie_pipe_nl1.sv` | Verilator | Parameter-width smoke with assertion monitor | Current CI side gate |
-| UVM | `test/uvm/` | VCS/UVM 1.2 | TX-path UVM smoke and extensibility scaffold | Manual, not in open-source CI |
+| UVM | `test/uvm/` | VCS/UVM 1.2 | TX-path UVM smoke, CDC assertions, and extensibility scaffold | Manual, not in open-source CI |
 
 Detailed UVM architecture, component roles, sequence matrix, and closure gaps are documented in `docs/uvm_verification.md`.
 
@@ -97,11 +97,11 @@ Priorities for higher confidence:
 
 1. **Corner cases** — Deeper pointer-wrap stimulus ( **`NUM_LANES=1`** smoke exercises wrap + minimal RX).  
 2. **Coverage closure** — Keep **`README.md`** verification metrics aligned with `make regress_cov` / `make coverage_summary`; treat **~95% overall line coverage** on RTL+TB as the current documented baseline until formal or richer stimulus lands.  
-3. **UVM closure** — Functional coverage, PIPE backpressure, RX path, CRC-in-UVM, and assertion bind (scoreboard strengthening is partially delivered — see `docs/uvm_verification.md`).  
+3. **UVM closure** — Functional coverage, PIPE backpressure, RX path, and CRC-in-UVM (scoreboard strengthening and assertion bind are delivered — see `docs/uvm_verification.md`).  
 4. **Formal** — Async FIFO invariants + handshake properties (tool-specific).  
 5. **PIPE policy (optional)** — Strict **`valid`⇒data hold** RTL + monitor if integrators require it.
 
-**Delivered in-tree:** Scoreboard; FIFO stress + CRC checker in TB; **`regress_cov`** flow; NL1 deep FIFO + RX pulse; UVM scoreboard drain check, per-lane **`valid & ready`** queueing, zero-extension and **error** compare on PIPE observations.
+**Delivered in-tree:** Scoreboard; FIFO stress + CRC checker in TB; **`regress_cov`** flow; NL1 deep FIFO + RX pulse; UVM scoreboard drain check, per-lane **`valid & ready`** queueing, zero-extension and **error** compare on PIPE observations; UVM CDC assertions/statistics bind.
 
 ## Exit criteria (smoke + lint)
 

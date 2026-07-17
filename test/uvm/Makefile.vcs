@@ -11,6 +11,7 @@ VCS = vcs -sverilog -ntb_opts uvm-1.2 \
 
 SRCS = ../../src/ucie_rdi_fifo_cdc.sv \
        ../../src/ucie_rdi_to_pcie_pipe_bridge.sv \
+       ../../test/ucie_rdi_to_pcie_pipe_bridge_assertions.sv \
        ucie_rdi_if.sv \
        pcie_pipe_if.sv \
        ucie_rdi_pcie_pkg.sv \

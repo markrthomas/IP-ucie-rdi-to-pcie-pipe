@@ -242,6 +242,7 @@ make -f Makefile.vcs run
 | Scoreboard | Per-lane queueing and lower-16-bit data compare |
 | RX path | Wired idle, not checked |
 | CRC | Disabled in UVM top |
+| Assertions | CDC assertions/statistics compiled into the UVM top |
 | Coverage | Not yet implemented |
 
 ### Xilinx Vivado
