@@ -295,6 +295,40 @@ package ucie_rdi_pcie_pkg;
 
     typedef uvm_sequencer #(pcie_pipe_ready_transaction) pcie_pipe_ready_sequencer;
 
+    // --- RDI RX Ready Driver (backpressure on the reverse-path output) ---
+    // Controls rdi_rx_ready so the PIPE -> RDI FIFO can be stalled and
+    // released, exercising reverse-path backpressure. Reuses the generic
+    // ready/hold control item.
+    class ucie_rdi_ready_driver extends uvm_driver #(pcie_pipe_ready_transaction);
+        virtual ucie_rdi_if vif;
+
+        `uvm_component_utils(ucie_rdi_ready_driver)
+
+        function new(string name, uvm_component parent);
+            super.new(name, parent);
+        endfunction
+
+        virtual function void build_phase(uvm_phase phase);
+            super.build_phase(phase);
+            if (!uvm_config_db#(virtual ucie_rdi_if)::get(this, "", "vif", vif))
+                `uvm_fatal("RDRDY", "Could not get vif")
+        endfunction
+
+        virtual task run_phase(uvm_phase phase);
+            vif.ctrl_cb.ready <= '1;
+
+            forever begin
+                seq_item_port.get_next_item(req);
+                @(vif.ctrl_cb);
+                vif.ctrl_cb.ready <= req.ready;
+                repeat (req.hold_cycles) @(vif.ctrl_cb);
+                seq_item_port.item_done();
+            end
+        endtask
+    endclass
+
+    typedef uvm_sequencer #(pcie_pipe_ready_transaction) ucie_rdi_ready_sequencer;
+
     // --- PIPE RX Driver ---
     class pcie_pipe_rx_driver extends uvm_driver #(pcie_pipe_transaction);
         virtual pcie_pipe_if vif;
@@ -668,6 +702,8 @@ package ucie_rdi_pcie_pkg;
         pcie_pipe_rx_agent pipe_rx_agent;
         ucie_rdi_monitor  rdi_rx_mon;
         pcie_pipe_monitor pipe_rx_mon;
+        ucie_rdi_ready_driver    rdi_rx_ready_drv;
+        ucie_rdi_ready_sequencer rdi_rx_ready_sqr;
         ucie_rdi_pcie_coverage cov;
         ucie_rdi_pcie_scoreboard sb;
 
@@ -684,11 +720,14 @@ package ucie_rdi_pcie_pkg;
             pipe_rx_agent = pcie_pipe_rx_agent::type_id::create("pipe_rx_agent", this);
             rdi_rx_mon = ucie_rdi_monitor::type_id::create("rdi_rx_mon", this);
             pipe_rx_mon = pcie_pipe_monitor::type_id::create("pipe_rx_mon", this);
+            rdi_rx_ready_drv = ucie_rdi_ready_driver::type_id::create("rdi_rx_ready_drv", this);
+            rdi_rx_ready_sqr = ucie_rdi_ready_sequencer::type_id::create("rdi_rx_ready_sqr", this);
             cov        = ucie_rdi_pcie_coverage::type_id::create("cov", this);
             sb         = ucie_rdi_pcie_scoreboard::type_id::create("sb", this);
         endfunction
 
         virtual function void connect_phase(uvm_phase phase);
+            rdi_rx_ready_drv.seq_item_port.connect(rdi_rx_ready_sqr.seq_item_export);
             rdi_agent.mon.ap.connect(sb.imp_rdi);
             pipe_agent.mon.ap.connect(sb.imp_pipe);
             pipe_rx_mon.ap.connect(sb.imp_rx_pipe);
@@ -734,6 +773,8 @@ package ucie_rdi_pcie_pkg;
             pcie_pipe_rx_single_lane_seq rx_single_seq;
             pcie_pipe_rx_error_seq  rx_err_seq;
             pcie_pipe_rx_burst_seq  rx_burst_seq;
+            pcie_pipe_rx_rand_seq   rx_rand_seq;
+            ucie_rdi_rx_backpressure_seq rx_bp_seq;
             ucie_rdi_crc_seq        crc_seq;
 
             phase.raise_objection(this);
@@ -790,6 +831,21 @@ package ucie_rdi_pcie_pkg;
             `uvm_info("TEST", "Starting RX Burst Sequence", UVM_LOW)
             rx_burst_seq = pcie_pipe_rx_burst_seq::type_id::create("rx_burst_seq");
             rx_burst_seq.start(env.pipe_rx_agent.sqr);
+
+            #100ns;
+
+            `uvm_info("TEST", "Starting RX Randomized Traffic with Backpressure", UVM_LOW)
+            fork
+                begin
+                    rx_bp_seq = ucie_rdi_rx_backpressure_seq::type_id::create("rx_bp_seq");
+                    rx_bp_seq.start(env.rdi_rx_ready_sqr);
+                end
+                begin
+                    #20ns;
+                    rx_rand_seq = pcie_pipe_rx_rand_seq::type_id::create("rx_rand_seq");
+                    rx_rand_seq.start(env.pipe_rx_agent.sqr);
+                end
+            join
 
             #1000ns;
             phase.drop_objection(this);

@@ -236,5 +236,61 @@ package ucie_rdi_seq_lib;
         endtask
     endclass
 
+    // --- PIPE RX Randomized Traffic Sequence ---
+    // Twelve constrained-random RX beats (at least one lane valid, random
+    // data and error). The mirrored RX scoreboard self-checks against the
+    // observed PIPE RX input, so no precomputed expected values are needed.
+    class pcie_pipe_rx_rand_seq extends uvm_sequence #(pcie_pipe_transaction);
+        `uvm_object_utils(pcie_pipe_rx_rand_seq)
+        function new(string name = "pcie_pipe_rx_rand_seq"); super.new(name); endfunction
+
+        virtual task body();
+            pcie_pipe_transaction tr;
+            repeat (12) begin
+                tr = pcie_pipe_transaction::type_id::create("rx_rand");
+                start_item(tr);
+                if (!tr.randomize() with { valid != 0; })
+                    `uvm_error("SEQ", "Randomization failed")
+                finish_item(tr);
+            end
+        endtask
+    endclass
+
+    // --- RDI RX Backpressure Sequence ---
+    // Stalls and releases rdi_rx_ready to exercise reverse-path (PIPE -> RDI)
+    // FIFO backpressure. Ends with ready high so queued beats drain.
+    class ucie_rdi_rx_backpressure_seq extends uvm_sequence #(pcie_pipe_ready_transaction);
+        `uvm_object_utils(ucie_rdi_rx_backpressure_seq)
+        function new(string name = "ucie_rdi_rx_backpressure_seq"); super.new(name); endfunction
+
+        virtual task body();
+            pcie_pipe_ready_transaction tr;
+
+            tr = pcie_pipe_ready_transaction::type_id::create("rx_hold_low");
+            start_item(tr);
+            if (!tr.randomize() with { ready == 4'b0000; hold_cycles == 32; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+
+            tr = pcie_pipe_ready_transaction::type_id::create("rx_release");
+            start_item(tr);
+            if (!tr.randomize() with { ready == 4'b1111; hold_cycles == 16; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+
+            tr = pcie_pipe_ready_transaction::type_id::create("rx_reassert_low");
+            start_item(tr);
+            if (!tr.randomize() with { ready == 4'b0000; hold_cycles == 12; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+
+            tr = pcie_pipe_ready_transaction::type_id::create("rx_final_release");
+            start_item(tr);
+            if (!tr.randomize() with { ready == 4'b1111; hold_cycles == 24; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+        endtask
+    endclass
+
 
 endpackage
