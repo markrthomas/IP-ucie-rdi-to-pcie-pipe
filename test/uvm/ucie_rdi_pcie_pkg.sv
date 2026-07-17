@@ -9,6 +9,8 @@ package ucie_rdi_pcie_pkg;
     `uvm_analysis_imp_decl(_pipe)
     `uvm_analysis_imp_decl(_covrdi)
     `uvm_analysis_imp_decl(_covpipe)
+    `uvm_analysis_imp_decl(_covrxrdi)
+    `uvm_analysis_imp_decl(_covrxpipe)
     `uvm_analysis_imp_decl(_rxrdi)
     `uvm_analysis_imp_decl(_rxpipe)
 
@@ -360,6 +362,8 @@ package ucie_rdi_pcie_pkg;
     class ucie_rdi_pcie_coverage extends uvm_component;
         uvm_analysis_imp_covrdi #(ucie_rdi_transaction, ucie_rdi_pcie_coverage) imp_rdi;
         uvm_analysis_imp_covpipe #(pcie_pipe_transaction, ucie_rdi_pcie_coverage) imp_pipe;
+        uvm_analysis_imp_covrxrdi #(ucie_rdi_transaction, ucie_rdi_pcie_coverage) imp_rx_rdi;
+        uvm_analysis_imp_covrxpipe #(pcie_pipe_transaction, ucie_rdi_pcie_coverage) imp_rx_pipe;
 
         `uvm_component_utils(ucie_rdi_pcie_coverage)
 
@@ -393,12 +397,44 @@ package ucie_rdi_pcie_pkg;
             valid_x_error: cross cp_valid, cp_error;
         endgroup
 
+        // RX direction (PIPE -> RDI): mirrors the TX covergroups so the
+        // reverse path is measured, not just the TX path.
+        covergroup cg_rx_pipe with function sample(logic [NUM_LANES-1:0] valid, logic [NUM_LANES-1:0] error);
+            option.per_instance = 1;
+            cp_valid: coverpoint valid {
+                bins single[] = {4'b0001, 4'b0010, 4'b0100, 4'b1000};
+                bins multi[] = {4'b0011, 4'b0110, 4'b1100, 4'b1111};
+            }
+            cp_error: coverpoint error {
+                bins none = {4'b0000};
+                bins any[] = {[4'b0001:4'b1111]};
+            }
+            valid_x_error: cross cp_valid, cp_error;
+        endgroup
+
+        covergroup cg_rx_rdi with function sample(logic [NUM_LANES-1:0] valid, logic [NUM_LANES-1:0] error);
+            option.per_instance = 1;
+            cp_valid: coverpoint valid {
+                bins single[] = {4'b0001, 4'b0010, 4'b0100, 4'b1000};
+                bins multi[] = {4'b0011, 4'b0110, 4'b1100, 4'b1111};
+            }
+            cp_error: coverpoint error {
+                bins none = {4'b0000};
+                bins any[] = {[4'b0001:4'b1111]};
+            }
+            valid_x_error: cross cp_valid, cp_error;
+        endgroup
+
         function new(string name, uvm_component parent);
             super.new(name, parent);
             imp_rdi = new("imp_rdi", this);
             imp_pipe = new("imp_pipe", this);
+            imp_rx_rdi = new("imp_rx_rdi", this);
+            imp_rx_pipe = new("imp_rx_pipe", this);
             cg_rdi = new();
             cg_pipe = new();
+            cg_rx_pipe = new();
+            cg_rx_rdi = new();
         endfunction
 
         function void write_covrdi(ucie_rdi_transaction tr);
@@ -409,12 +445,24 @@ package ucie_rdi_pcie_pkg;
             cg_pipe.sample(tr.valid, tr.error);
         endfunction
 
+        // PIPE RX stimulus entering the DUT (reverse path source).
+        function void write_covrxpipe(pcie_pipe_transaction tr);
+            cg_rx_pipe.sample(tr.valid, tr.error);
+        endfunction
+
+        // RDI RX beats emerging from the DUT (reverse path sink).
+        function void write_covrxrdi(ucie_rdi_transaction tr);
+            cg_rx_rdi.sample(tr.valid, tr.error);
+        endfunction
+
         virtual function void report_phase(uvm_phase phase);
             super.report_phase(phase);
             `uvm_info("COV",
-                      $sformatf("UVM coverage: RDI=%0.2f%% PIPE=%0.2f%%",
+                      $sformatf("UVM coverage: RDI=%0.2f%% PIPE=%0.2f%% RX_PIPE=%0.2f%% RX_RDI=%0.2f%%",
                                 cg_rdi.get_inst_coverage(),
-                                cg_pipe.get_inst_coverage()),
+                                cg_pipe.get_inst_coverage(),
+                                cg_rx_pipe.get_inst_coverage(),
+                                cg_rx_rdi.get_inst_coverage()),
                       UVM_LOW)
         endfunction
     endclass
@@ -589,6 +637,8 @@ package ucie_rdi_pcie_pkg;
             rdi_rx_mon.ap.connect(sb.imp_rx_rdi);
             rdi_agent.mon.ap.connect(cov.imp_rdi);
             pipe_agent.mon.ap.connect(cov.imp_pipe);
+            pipe_rx_mon.ap.connect(cov.imp_rx_pipe);
+            rdi_rx_mon.ap.connect(cov.imp_rx_rdi);
         endfunction
     endclass
 

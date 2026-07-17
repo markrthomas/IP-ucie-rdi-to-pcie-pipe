@@ -122,7 +122,7 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 | 2 | Extend scoreboard for RX path and full-system checks | TX path: **delivered** — per-lane `valid & ready` queueing, upper 16-bit zero check, error compare, and `check_phase` TX queue drain. RX path now has smoke-driver/queueing scaffolding. |
 | 3 | Expand PIPE backpressure coverage and decouple passive vs. active ready control | Required to verify FIFO full, `rdi_flow_ctrl`, and hold-under-stall behavior in UVM. |
 | 4 | Expand RX path sequences and mirrored RDI RX scoreboard | The RTL includes `PIPE -> RDI`; current UVM now exercises a smoke sequence but still needs deeper RX closure. |
-| 5 | Extend functional coverage to RX/TX direction, FIFO occupancy, width conversion, and CRC enable | Provides measurable closure beyond pass/fail simulation. |
+| 5 | Extend functional coverage to RX/TX direction, FIFO occupancy, width conversion, and CRC enable | **RX direction: delivered** — `ucie_rdi_pcie_coverage` now samples the reverse path via `cg_rx_pipe` (PIPE RX stimulus) and `cg_rx_rdi` (RDI RX output), fed from the RX monitors alongside the TX covergroups. Still open: FIFO-occupancy, width-conversion, and CRC-enable coverpoints. |
 | 6 | Add a CRC predictor and broaden CRC coverage | Current smoke coverage validates the lane-0 residue path, but the model is still only a top-level checker. |
 
 ## Run commands

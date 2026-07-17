@@ -4,6 +4,10 @@ All notable changes to this project are documented here. Version tags follow [Se
 
 ## [Unreleased]
 
+### Added
+
+- **UVM RX-direction functional coverage**: `ucie_rdi_pcie_coverage` now collects the reverse (PIPE -> RDI) path through two new covergroups — `cg_rx_pipe` (PIPE RX stimulus entering the DUT) and `cg_rx_rdi` (RDI RX beats leaving the DUT) — wired from the existing RX monitors via new analysis imports. The report now prints `RX_PIPE`/`RX_RDI` percentages alongside the TX numbers (UVM closure plan item 5, RX direction). FIFO-occupancy, width-conversion, and CRC-enable coverpoints remain open.
+
 ### Changed
 
 - **UVM lane/data geometry centralized**: Added `NUM_LANES`, `RDI_DATA_WIDTH`, `PIPE_DATA_WIDTH`, and derived `RDI_BUS_WIDTH`/`PIPE_BUS_WIDTH` parameters to `ucie_rdi_pcie_pkg` as the single source of truth. Transaction field widths, scoreboard per-lane loops and bit slices, and coverage sample ports now derive from these parameters, and `uvm_test_top` passes the same values into the interfaces, DUT, and assertion binder — removing hard-coded `4`/`16`/`32` magic numbers so the UVM environment cannot silently diverge from the RTL parameters (UVM closure plan item 1). Values are unchanged at the default 4-lane configuration; `seq_lib` stimulus vectors and covergroup bins remain 4-lane specific.
