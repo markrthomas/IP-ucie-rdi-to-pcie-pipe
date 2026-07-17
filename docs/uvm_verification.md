@@ -9,9 +9,9 @@ This guide describes the UVM environment in `test/uvm/` as it exists in this rep
 | Simulator target | Synopsys VCS | Driven by `test/uvm/Makefile.vcs` with `-ntb_opts uvm-1.2`. |
 | DUT parameters | Fixed 4 lanes, 16-bit RDI, 32-bit PIPE, FIFO depth 16 | The RTL is parameterized; the UVM transaction classes and scoreboard are currently fixed-width. |
 | TX path (`RDI -> PIPE`) | Stimulated and scoreboarding enabled | Active RDI agent drives requests; passive PIPE monitor observes accepted beats. |
-| RX path (`PIPE -> RDI`) | Wired but not stimulated or checked | `uvm_test_top` instantiates RX interfaces, ties `pipe_rx_if.valid = 0`, and keeps `rdi_rx_if.ready = 1`. |
+| RX path (`PIPE -> RDI`) | Wired with passive monitors, but not stimulated or checked | `uvm_test_top` instantiates RX interfaces, ties `pipe_rx_if.valid = 0`, and keeps `rdi_rx_if.ready = 1`. |
 | CRC | Disabled | `crc_enable` is tied to `4'b0`; use the non-UVM smoke test for current CRC checking. |
-| Backpressure | PIPE TX ready is agent-controlled in the sanity test | The backpressure sequence now drives `ready` low then high; FIFO-full behavior is still a future extension because the RDI source driver remains handshake-gated. |
+| Backpressure | PIPE TX ready is agent-controlled in the sanity test | The backpressure sequence now drives `ready` low/high/low/high with longer stalls; FIFO-full behavior is still a future extension because the RDI source driver remains handshake-gated. |
 | Assertions | Compiled and active in the UVM top | CDC monitor/statistics now run in both the UVM flow and the non-UVM regression. |
 
 ## UVM block diagram
@@ -99,8 +99,8 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 | `ucie_rdi_single_lane_seq` | One lane-0 beat with `data == 64'hDEAD` | Basic lane-0 TX transport | Lower 16 bits and zero-extended upper half on lane 0. |
 | `ucie_rdi_multi_lane_seq` | One all-lane beat with lane-specific 16-bit words | Lane packing and independent per-lane queueing | Same per lane with observed PIPE handshake. |
 | `ucie_rdi_error_seq` | Lane-2 valid with `error[2] == 1` | Error propagation | **Error bit compared** on observed PIPE beats (with data/zero-extension checks). |
-| `ucie_rdi_flow_ctrl_seq` | Twenty lane-1 beats | Repeated traffic through FIFO | Data order checked if PIPE accepts all beats; paired with a backpressure sequence in the sanity test. |
-| `pcie_pipe_backpressure_seq` | PIPE ready low then high | PIPE stall / release behavior | Drives `ready` low for 16 cycles, then restores it high for 16 cycles. |
+| `ucie_rdi_flow_ctrl_seq` | Thirty-two lane-1 beats | Repeated traffic through FIFO | Data order checked if PIPE accepts all beats; paired with a backpressure sequence in the sanity test. |
+| `pcie_pipe_backpressure_seq` | PIPE ready low/high/low/high | PIPE stall / release behavior | Drives `ready` low for 48 cycles, releases for 16, reasserts low for 16, then releases for 24. |
 
 ## Scoreboard contract
 
@@ -120,7 +120,7 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 | 2 | Extend scoreboard for RX path and full-system checks | TX path: **delivered** — per-lane `valid & ready` queueing, upper 16-bit zero check, error compare, and `check_phase` TX queue drain. |
 | 3 | Expand PIPE backpressure coverage and decouple passive vs. active ready control | Required to verify FIFO full, `rdi_flow_ctrl`, and hold-under-stall behavior in UVM. |
 | 4 | Add RX path sequences and a mirrored RDI RX scoreboard | The RTL includes `PIPE -> RDI`; current UVM does not exercise it. |
-| 5 | Add functional coverage groups for lane, error, backpressure, FIFO occupancy, width conversion, and CRC enable | Provides measurable closure beyond pass/fail simulation. |
+| 5 | Extend functional coverage to RX/TX direction, FIFO occupancy, width conversion, and CRC enable | Provides measurable closure beyond pass/fail simulation. |
 | 6 | Add CRC sequences with scoreboard mirror or predictor | Current CRC confidence comes from the non-UVM testbench only. |
 
 ## Run commands

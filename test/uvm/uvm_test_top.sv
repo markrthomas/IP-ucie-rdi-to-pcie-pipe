@@ -105,6 +105,8 @@ module uvm_test_top;
     initial begin
         uvm_config_db#(virtual ucie_rdi_if)::set(null, "*.env.rdi_agent*", "vif", rdi_tx_if);
         uvm_config_db#(virtual pcie_pipe_if)::set(null, "*.env.pipe_agent*", "vif", pipe_tx_if);
+        uvm_config_db#(virtual ucie_rdi_if)::set(null, "*.env.rdi_rx_mon*", "vif", rdi_rx_if);
+        uvm_config_db#(virtual pcie_pipe_if)::set(null, "*.env.pipe_rx_mon*", "vif", pipe_rx_if);
         
         // Default ready signals
         pipe_tx_if.ready = 4'b1111;

@@ -67,7 +67,7 @@ package ucie_rdi_seq_lib;
         function new(string name = "ucie_rdi_flow_ctrl_seq"); super.new(name); endfunction
 
         virtual task body();
-            repeat (20) begin
+            repeat (32) begin
                 ucie_rdi_transaction tr;
                 tr = ucie_rdi_transaction::type_id::create("tr");
                 start_item(tr);
@@ -88,13 +88,25 @@ package ucie_rdi_seq_lib;
 
             tr = pcie_pipe_ready_transaction::type_id::create("hold_low");
             start_item(tr);
-            if (!tr.randomize() with { ready == 4'b0000; hold_cycles == 16; })
+            if (!tr.randomize() with { ready == 4'b0000; hold_cycles == 48; })
                 `uvm_error("SEQ", "Randomization failed")
             finish_item(tr);
 
             tr = pcie_pipe_ready_transaction::type_id::create("release");
             start_item(tr);
             if (!tr.randomize() with { ready == 4'b1111; hold_cycles == 16; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+
+            tr = pcie_pipe_ready_transaction::type_id::create("reassert_low");
+            start_item(tr);
+            if (!tr.randomize() with { ready == 4'b0000; hold_cycles == 16; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+
+            tr = pcie_pipe_ready_transaction::type_id::create("final_release");
+            start_item(tr);
+            if (!tr.randomize() with { ready == 4'b1111; hold_cycles == 24; })
                 `uvm_error("SEQ", "Randomization failed")
             finish_item(tr);
         endtask

@@ -5,6 +5,10 @@ package ucie_rdi_pcie_pkg;
 
     import uvm_pkg::*;
     `include "uvm_macros.svh"
+    `uvm_analysis_imp_decl(_rdi)
+    `uvm_analysis_imp_decl(_pipe)
+    `uvm_analysis_imp_decl(_covrdi)
+    `uvm_analysis_imp_decl(_covpipe)
 
     // --- UCIe RDI Transaction ---
     class ucie_rdi_transaction extends uvm_sequence_item;
@@ -210,11 +214,26 @@ package ucie_rdi_pcie_pkg;
     // --- PIPE Ready Driver ---
     class pcie_pipe_ready_driver extends uvm_driver #(pcie_pipe_ready_transaction);
         virtual pcie_pipe_if vif;
+        covergroup cg_ready with function sample(logic [3:0] ready, int unsigned hold_cycles);
+            option.per_instance = 1;
+            cp_ready: coverpoint ready {
+                bins all_low = {4'b0000};
+                bins all_high = {4'b1111};
+                bins partial[] = {[4'b0001:4'b1110]};
+            }
+            cp_hold_cycles: coverpoint hold_cycles {
+                bins short = {[1:8]};
+                bins medium = {[9:24]};
+                bins long = {[25:64]};
+            }
+            ready_x_hold: cross cp_ready, cp_hold_cycles;
+        endgroup
 
         `uvm_component_utils(pcie_pipe_ready_driver)
 
         function new(string name, uvm_component parent);
             super.new(name, parent);
+            cg_ready = new();
         endfunction
 
         virtual function void build_phase(uvm_phase phase);
@@ -228,15 +247,87 @@ package ucie_rdi_pcie_pkg;
 
             forever begin
                 seq_item_port.get_next_item(req);
+                cg_ready.sample(req.ready, req.hold_cycles);
                 @(vif.ctrl_cb);
                 vif.ctrl_cb.ready <= req.ready;
                 repeat (req.hold_cycles) @(vif.ctrl_cb);
                 seq_item_port.item_done();
             end
         endtask
+
+        virtual function void report_phase(uvm_phase phase);
+            super.report_phase(phase);
+            `uvm_info("COV",
+                      $sformatf("PIPE ready-driver coverage: %0.2f%%",
+                                cg_ready.get_inst_coverage()),
+                      UVM_LOW)
+        endfunction
     endclass
 
     typedef uvm_sequencer #(pcie_pipe_ready_transaction) pcie_pipe_ready_sequencer;
+
+    // --- UVM Coverage Collector ---
+    class ucie_rdi_pcie_coverage extends uvm_component;
+        uvm_analysis_imp_covrdi #(ucie_rdi_transaction, ucie_rdi_pcie_coverage) imp_rdi;
+        uvm_analysis_imp_covpipe #(pcie_pipe_transaction, ucie_rdi_pcie_coverage) imp_pipe;
+
+        `uvm_component_utils(ucie_rdi_pcie_coverage)
+
+        covergroup cg_rdi with function sample(logic [3:0] valid, logic [3:0] error, logic [3:0] flow_ctrl);
+            option.per_instance = 1;
+            cp_valid: coverpoint valid {
+                bins single[] = {4'b0001, 4'b0010, 4'b0100, 4'b1000};
+                bins multi[] = {4'b0011, 4'b0110, 4'b1100, 4'b1111};
+            }
+            cp_error: coverpoint error {
+                bins none = {4'b0000};
+                bins any[] = {[4'b0001:4'b1111]};
+            }
+            cp_flow_ctrl: coverpoint flow_ctrl {
+                bins none = {4'b0000};
+                bins any[] = {[4'b0001:4'b1111]};
+            }
+            valid_x_error: cross cp_valid, cp_error;
+        endgroup
+
+        covergroup cg_pipe with function sample(logic [3:0] valid, logic [3:0] error);
+            option.per_instance = 1;
+            cp_valid: coverpoint valid {
+                bins single[] = {4'b0001, 4'b0010, 4'b0100, 4'b1000};
+                bins multi[] = {4'b0011, 4'b0110, 4'b1100, 4'b1111};
+            }
+            cp_error: coverpoint error {
+                bins none = {4'b0000};
+                bins any[] = {[4'b0001:4'b1111]};
+            }
+            valid_x_error: cross cp_valid, cp_error;
+        endgroup
+
+        function new(string name, uvm_component parent);
+            super.new(name, parent);
+            imp_rdi = new("imp_rdi", this);
+            imp_pipe = new("imp_pipe", this);
+            cg_rdi = new();
+            cg_pipe = new();
+        endfunction
+
+        function void write_covrdi(ucie_rdi_transaction tr);
+            cg_rdi.sample(tr.valid, tr.error, tr.flow_ctrl);
+        endfunction
+
+        function void write_covpipe(pcie_pipe_transaction tr);
+            cg_pipe.sample(tr.valid, tr.error);
+        endfunction
+
+        virtual function void report_phase(uvm_phase phase);
+            super.report_phase(phase);
+            `uvm_info("COV",
+                      $sformatf("UVM coverage: RDI=%0.2f%% PIPE=%0.2f%%",
+                                cg_rdi.get_inst_coverage(),
+                                cg_pipe.get_inst_coverage()),
+                      UVM_LOW)
+        endfunction
+    endclass
 
     class pcie_pipe_agent extends uvm_agent;
         pcie_pipe_monitor mon;
@@ -279,9 +370,6 @@ package ucie_rdi_pcie_pkg;
         ucie_rdi_transaction tx_exp_q[4][$];
 
         `uvm_component_utils(ucie_rdi_pcie_scoreboard)
-
-        `uvm_analysis_imp_decl(_rdi)
-        `uvm_analysis_imp_decl(_pipe)
 
         function new(string name, uvm_component parent);
             super.new(name, parent);
@@ -337,6 +425,9 @@ package ucie_rdi_pcie_pkg;
     class ucie_rdi_pcie_env extends uvm_env;
         ucie_rdi_agent    rdi_agent;
         pcie_pipe_agent   pipe_agent;
+        ucie_rdi_monitor  rdi_rx_mon;
+        pcie_pipe_monitor pipe_rx_mon;
+        ucie_rdi_pcie_coverage cov;
         ucie_rdi_pcie_scoreboard sb;
 
         `uvm_component_utils(ucie_rdi_pcie_env)
@@ -349,12 +440,17 @@ package ucie_rdi_pcie_pkg;
             super.build_phase(phase);
             rdi_agent  = ucie_rdi_agent::type_id::create("rdi_agent", this);
             pipe_agent = pcie_pipe_agent::type_id::create("pipe_agent", this);
+            rdi_rx_mon = ucie_rdi_monitor::type_id::create("rdi_rx_mon", this);
+            pipe_rx_mon = pcie_pipe_monitor::type_id::create("pipe_rx_mon", this);
+            cov        = ucie_rdi_pcie_coverage::type_id::create("cov", this);
             sb         = ucie_rdi_pcie_scoreboard::type_id::create("sb", this);
         endfunction
 
         virtual function void connect_phase(uvm_phase phase);
             rdi_agent.mon.ap.connect(sb.imp_rdi);
             pipe_agent.mon.ap.connect(sb.imp_pipe);
+            rdi_agent.mon.ap.connect(cov.imp_rdi);
+            pipe_agent.mon.ap.connect(cov.imp_pipe);
         endfunction
     endclass
 
