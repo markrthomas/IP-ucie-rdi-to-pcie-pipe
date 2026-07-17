@@ -56,7 +56,7 @@ graph TD
 | TX path | Stimulated and checked at smoke level |
 | RX path | Interfaces are instantiated but RX stimulus is tied idle |
 | CRC | Disabled in `uvm_test_top` |
-| PIPE backpressure | `pipe_tx_if.ready` held high |
+| PIPE backpressure | Active pipe-agent mode can drive `ready` low/high for the sanity test |
 | Assertions | Not included in the UVM compile list |
 
 ## 2. Data Flow & Scoreboarding
@@ -113,7 +113,8 @@ sequenceDiagram
 *   `ucie_rdi_single_lane_seq`: Targets Lane 0.
 *   `ucie_rdi_multi_lane_seq`: Drives all 4 lanes simultaneously.
 *   `ucie_rdi_error_seq`: Verifies propagation of the `rdi_error` bit.
-*   `ucie_rdi_flow_ctrl_seq`: Sends 20 consecutive lane-1 beats. PIPE ready is not stalled today, so this is repeated-traffic stimulus rather than a full FIFO-backpressure test.
+*   `ucie_rdi_flow_ctrl_seq`: Sends 20 consecutive lane-1 beats.
+*   `pcie_pipe_backpressure_seq`: Drives PIPE `ready` low, then high, while the flow-control sequence is running.
 
 ### Sequence Matrix
 
@@ -123,6 +124,7 @@ sequenceDiagram
 | `ucie_rdi_multi_lane_seq` | `1111` | `64'hDDDD_CCCC_BBBB_AAAA` | `0000` | All-lane packing and independent lane queues. |
 | `ucie_rdi_error_seq` | `0100` | `64'hEEEE_1234_0000_0000` | `0100` | Error propagation stimulus. |
 | `ucie_rdi_flow_ctrl_seq` | `0010` | `64'h0000_0000_1234_0000` | `0000` | Repeated lane-1 FIFO traffic. |
+| `pcie_pipe_backpressure_seq` | `1111` | N/A | N/A | PIPE ready stall and release control. |
 
 ## 4. Usage Instructions
 
@@ -150,7 +152,7 @@ make -f Makefile.vcs pdf
 | Priority | Item |
 | :---: | :--- |
 | 1 | Bind or compile `ucie_rdi_to_pcie_pipe_bridge_assertions` into UVM runs for CDC parity with Verilator. |
-| 2 | Add active PIPE ready/backpressure control for FIFO-full and flow-control coverage. |
+| 2 | Expand PIPE ready/backpressure control into richer FIFO-full and flow-control coverage. |
 | 3 | Add RX path driver, monitor hookup, and mirrored scoreboard checks. |
 | 4 | Add CRC enable sequences and a CRC predictor. |
 | 5 | Add functional coverage groups for lane, error, backpressure, RX/TX direction, and CRC scenarios. |

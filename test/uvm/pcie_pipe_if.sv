@@ -22,6 +22,15 @@ interface pcie_pipe_if #(
         output error;
     endclocking
 
+    // Ready control clocking block (for TX backpressure testing)
+    clocking ctrl_cb @(posedge clk);
+        default input #1ns output #1ns;
+        output ready;
+        input  valid;
+        input  data;
+        input  error;
+    endclocking
+
     // Monitor Clocking Block
     clocking mon_cb @(posedge clk);
         default input #1ns output #1ns;
@@ -32,6 +41,7 @@ interface pcie_pipe_if #(
     endclocking
 
     modport drv (clocking drv_cb, input clk, rst_n);
+    modport ctrl (clocking ctrl_cb, input clk, rst_n);
     modport mon (clocking mon_cb, input clk, rst_n);
 
 endinterface

@@ -78,5 +78,27 @@ package ucie_rdi_seq_lib;
         endtask
     endclass
 
+    // --- PIPE Backpressure Sequence ---
+    class pcie_pipe_backpressure_seq extends uvm_sequence #(pcie_pipe_ready_transaction);
+        `uvm_object_utils(pcie_pipe_backpressure_seq)
+        function new(string name = "pcie_pipe_backpressure_seq"); super.new(name); endfunction
+
+        virtual task body();
+            pcie_pipe_ready_transaction tr;
+
+            tr = pcie_pipe_ready_transaction::type_id::create("hold_low");
+            start_item(tr);
+            if (!tr.randomize() with { ready == 4'b0000; hold_cycles == 16; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+
+            tr = pcie_pipe_ready_transaction::type_id::create("release");
+            start_item(tr);
+            if (!tr.randomize() with { ready == 4'b1111; hold_cycles == 16; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+        endtask
+    endclass
+
 
 endpackage

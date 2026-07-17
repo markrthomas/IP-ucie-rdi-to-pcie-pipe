@@ -67,7 +67,7 @@ The UVM environment is intentionally separated from the Verilator smoke regressi
 | UVM area | Present today | Recommended next check |
 |----------|---------------|------------------------|
 | RDI active agent | Drives fixed-width 4-lane TX transactions | Add parameter/config object for lane and data widths. |
-| PIPE passive agent | Monitors TX PIPE accepts | Add controlled ready/backpressure behavior. |
+| PIPE passive/active agent | Monitors TX PIPE accepts and can drive `ready` in active mode | Add richer FIFO-full/backpressure coverage and a cleaner mode switch. |
 | Scoreboard | Per-lane TX queues, **`valid & ready`** gating, lower **and upper (zero)** 16-bit data compare, **error** compare, **`check_phase` queue drain** | Functional coverage; RX path scoreboard; CRC predictor |
 | RX path | DUT and interfaces wired, stimulus idle | Add active PIPE RX driver and RDI RX monitor/scoreboard. |
 | CRC | Disabled in UVM top | Add CRC enable sequence and predictor. |

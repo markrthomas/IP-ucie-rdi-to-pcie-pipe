@@ -11,7 +11,7 @@ This guide describes the UVM environment in `test/uvm/` as it exists in this rep
 | TX path (`RDI -> PIPE`) | Stimulated and scoreboarding enabled | Active RDI agent drives requests; passive PIPE monitor observes accepted beats. |
 | RX path (`PIPE -> RDI`) | Wired but not stimulated or checked | `uvm_test_top` instantiates RX interfaces, ties `pipe_rx_if.valid = 0`, and keeps `rdi_rx_if.ready = 1`. |
 | CRC | Disabled | `crc_enable` is tied to `4'b0`; use the non-UVM smoke test for current CRC checking. |
-| Backpressure | PIPE TX ready held high | The flow-control sequence sends 20 lane-1 beats but does not force PIPE stalls, so FIFO-full behavior is not yet UVM-closed. |
+| Backpressure | PIPE TX ready is agent-controlled in the sanity test | The backpressure sequence now drives `ready` low then high; FIFO-full behavior is still a future extension because the RDI source driver remains handshake-gated. |
 | Assertions | Not compiled in UVM file list | CDC monitor/statistics are exercised by the non-UVM regression. |
 
 ## UVM block diagram
@@ -33,7 +33,7 @@ flowchart LR
         RDI_SQR[ucie_rdi_sequencer]
         RDI_DRV[ucie_rdi_driver]
         RDI_MON[ucie_rdi_monitor]
-        PIPE_AGENT[passive pcie_pipe_agent]
+        PIPE_AGENT[configurable pcie_pipe_agent]
         PIPE_MON[pcie_pipe_monitor]
         SB[ucie_rdi_pcie_scoreboard]
     end
@@ -99,7 +99,8 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 | `ucie_rdi_single_lane_seq` | One lane-0 beat with `data == 64'hDEAD` | Basic lane-0 TX transport | Lower 16 bits and zero-extended upper half on lane 0. |
 | `ucie_rdi_multi_lane_seq` | One all-lane beat with lane-specific 16-bit words | Lane packing and independent per-lane queueing | Same per lane with observed PIPE handshake. |
 | `ucie_rdi_error_seq` | Lane-2 valid with `error[2] == 1` | Error propagation | **Error bit compared** on observed PIPE beats (with data/zero-extension checks). |
-| `ucie_rdi_flow_ctrl_seq` | Twenty lane-1 beats | Repeated traffic through FIFO | Data order checked if PIPE accepts all beats; no forced stall or full condition. |
+| `ucie_rdi_flow_ctrl_seq` | Twenty lane-1 beats | Repeated traffic through FIFO | Data order checked if PIPE accepts all beats; paired with a backpressure sequence in the sanity test. |
+| `pcie_pipe_backpressure_seq` | PIPE ready low then high | PIPE stall / release behavior | Drives `ready` low for 16 cycles, then restores it high for 16 cycles. |
 
 ## Scoreboard contract
 
@@ -117,7 +118,7 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 |----------|-----------|----------------|
 | 1 | Make transaction widths parameter-aware or centralize lane/data constants in a config object | Prevents divergence from RTL parameters and enables `NUM_LANES=1` UVM tests. |
 | 2 | Extend scoreboard for RX path and full-system checks | TX path: **delivered** — per-lane `valid & ready` queueing, upper 16-bit zero check, error compare, and `check_phase` TX queue drain. |
-| 3 | Add an active/passive PIPE agent mode and a PIPE ready/backpressure sequence | Required to verify FIFO full, `rdi_flow_ctrl`, and hold-under-stall behavior in UVM. |
+| 3 | Expand PIPE backpressure coverage and decouple passive vs. active ready control | Required to verify FIFO full, `rdi_flow_ctrl`, and hold-under-stall behavior in UVM. |
 | 4 | Add RX path sequences and a mirrored RDI RX scoreboard | The RTL includes `PIPE -> RDI`; current UVM does not exercise it. |
 | 5 | Compile assertion monitor or bind equivalent SVA into UVM runs | Keeps UVM aligned with CDC and handshake assumptions used by the release regression. |
 | 6 | Add functional coverage groups for lane, error, backpressure, FIFO occupancy, width conversion, and CRC enable | Provides measurable closure beyond pass/fail simulation. |

@@ -46,6 +46,23 @@ package ucie_rdi_pcie_pkg;
         endfunction
     endclass
 
+    // --- PIPE Ready Control Transaction ---
+    class pcie_pipe_ready_transaction extends uvm_sequence_item;
+        rand logic [3:0] ready;
+        rand int unsigned hold_cycles;
+
+        constraint c_hold_cycles { hold_cycles inside {[1:32]}; }
+
+        `uvm_object_utils_begin(pcie_pipe_ready_transaction)
+            `uvm_field_int(ready,       UVM_ALL_ON)
+            `uvm_field_int(hold_cycles, UVM_ALL_ON)
+        `uvm_object_utils_end
+
+        function new(string name = "pcie_pipe_ready_transaction");
+            super.new(name);
+        endfunction
+    endclass
+
     // --- UCIe RDI Driver ---
     class ucie_rdi_driver extends uvm_driver #(ucie_rdi_transaction);
         virtual ucie_rdi_if vif;
@@ -190,13 +207,66 @@ package ucie_rdi_pcie_pkg;
         endtask
     endclass
 
-    class pcie_pipe_agent extends uvm_agent;
-        pcie_pipe_monitor mon;
-        `uvm_component_utils(pcie_pipe_agent)
-        function new(string name, uvm_component parent); super.new(name, parent); endfunction
+    // --- PIPE Ready Driver ---
+    class pcie_pipe_ready_driver extends uvm_driver #(pcie_pipe_ready_transaction);
+        virtual pcie_pipe_if vif;
+
+        `uvm_component_utils(pcie_pipe_ready_driver)
+
+        function new(string name, uvm_component parent);
+            super.new(name, parent);
+        endfunction
+
         virtual function void build_phase(uvm_phase phase);
             super.build_phase(phase);
+            if (!uvm_config_db#(virtual pcie_pipe_if)::get(this, "", "vif", vif))
+                `uvm_fatal("PDRV", "Could not get vif")
+        endfunction
+
+        virtual task run_phase(uvm_phase phase);
+            vif.ctrl_cb.ready <= '1;
+
+            forever begin
+                seq_item_port.get_next_item(req);
+                @(vif.ctrl_cb);
+                vif.ctrl_cb.ready <= req.ready;
+                repeat (req.hold_cycles) @(vif.ctrl_cb);
+                seq_item_port.item_done();
+            end
+        endtask
+    endclass
+
+    typedef uvm_sequencer #(pcie_pipe_ready_transaction) pcie_pipe_ready_sequencer;
+
+    class pcie_pipe_agent extends uvm_agent;
+        pcie_pipe_monitor mon;
+        pcie_pipe_ready_driver drv;
+        pcie_pipe_ready_sequencer sqr;
+        `uvm_component_utils(pcie_pipe_agent)
+
+        function new(string name, uvm_component parent);
+            super.new(name, parent);
+        endfunction
+
+        virtual function void build_phase(uvm_phase phase);
+            uvm_active_passive_enum mode;
+            super.build_phase(phase);
+            if (uvm_config_db#(uvm_active_passive_enum)::get(this, "", "is_active", mode)) begin
+                set_is_active(mode);
+            end else begin
+                set_is_active(UVM_PASSIVE);
+            end
             mon = pcie_pipe_monitor::type_id::create("mon", this);
+            if (get_is_active() == UVM_ACTIVE) begin
+                drv = pcie_pipe_ready_driver::type_id::create("drv", this);
+                sqr = pcie_pipe_ready_sequencer::type_id::create("sqr", this);
+            end
+        endfunction
+
+        virtual function void connect_phase(uvm_phase phase);
+            if (get_is_active() == UVM_ACTIVE) begin
+                drv.seq_item_port.connect(sqr.seq_item_export);
+            end
         endfunction
     endclass
 
@@ -306,11 +376,17 @@ package ucie_rdi_pcie_pkg;
         `uvm_component_utils(ucie_rdi_pcie_sanity_test)
         function new(string name, uvm_component parent); super.new(name, parent); endfunction
 
+        virtual function void build_phase(uvm_phase phase);
+            uvm_config_db#(uvm_active_passive_enum)::set(this, "env.pipe_agent", "is_active", UVM_ACTIVE);
+            super.build_phase(phase);
+        endfunction
+
         virtual task run_phase(uvm_phase phase);
             ucie_rdi_single_lane_seq single_seq;
             ucie_rdi_multi_lane_seq multi_seq;
             ucie_rdi_error_seq      err_seq;
             ucie_rdi_flow_ctrl_seq  fc_seq;
+            pcie_pipe_backpressure_seq bp_seq;
 
             phase.raise_objection(this);
             
@@ -333,8 +409,17 @@ package ucie_rdi_pcie_pkg;
             #100ns;
 
             `uvm_info("TEST", "Starting Flow Control Sequence", UVM_LOW)
-            fc_seq = ucie_rdi_flow_ctrl_seq::type_id::create("fc_seq");
-            fc_seq.start(env.rdi_agent.sqr);
+            fork
+                begin
+                    bp_seq = pcie_pipe_backpressure_seq::type_id::create("bp_seq");
+                    bp_seq.start(env.pipe_agent.sqr);
+                end
+                begin
+                    #20ns;
+                    fc_seq = ucie_rdi_flow_ctrl_seq::type_id::create("fc_seq");
+                    fc_seq.start(env.rdi_agent.sqr);
+                end
+            join
 
             #1000ns;
             phase.drop_objection(this);
