@@ -103,6 +103,9 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 | `ucie_rdi_crc_seq` | Two lane-0 beats with CRC enabled | CRC residue smoke | `crc_enable[0]` is asserted around the sequence and the UVM top mirrors the residue compare. |
 | `pcie_pipe_backpressure_seq` | PIPE ready low/high/low/high | PIPE stall / release behavior | Drives `ready` low for 48 cycles, releases for 16, reasserts low for 16, then releases for 24. |
 | `pcie_pipe_rx_seq` | PIPE RX valid/data/error beats | PIPE -> RDI conversion and ordering | Mirrored RX queueing checks lower-half data and error propagation on accepted RX beats. |
+| `pcie_pipe_rx_single_lane_seq` | One lane-0 RX beat (`0xBEEF`) | Basic reverse-path transport | Mirrored RX queue checks lane-0 lower-half data. |
+| `pcie_pipe_rx_error_seq` | Lane-1 RX beat with `error[1]` | Reverse-path error propagation | Mirrored RX queue checks lane-1 data and error bit. |
+| `pcie_pipe_rx_burst_seq` | Four back-to-back lane-0 beats, incrementing payload | Reverse-path FIFO ordering | Mirrored RX queue verifies in-order delivery of the four payloads. |
 
 ## Scoreboard contract
 
@@ -121,7 +124,7 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 | 1 | Make transaction widths parameter-aware or centralize lane/data constants in a config object | **Delivered (centralization):** lane/data geometry lives in `ucie_rdi_pcie_pkg` parameters that drive the transaction widths, scoreboard slicing, coverage sample ports, and (via `uvm_test_top`) the interface/DUT instantiations. Remaining for a `NUM_LANES` sweep: generalize `seq_lib` stimulus vectors and covergroup bins. |
 | 2 | Extend scoreboard for RX path and full-system checks | TX path: **delivered** — per-lane `valid & ready` queueing, upper 16-bit zero check, error compare, and `check_phase` TX queue drain. RX path now has smoke-driver/queueing scaffolding. |
 | 3 | Expand PIPE backpressure coverage and decouple passive vs. active ready control | Required to verify FIFO full, `rdi_flow_ctrl`, and hold-under-stall behavior in UVM. |
-| 4 | Expand RX path sequences and mirrored RDI RX scoreboard | The RTL includes `PIPE -> RDI`; current UVM now exercises a smoke sequence but still needs deeper RX closure. |
+| 4 | Expand RX path sequences and mirrored RDI RX scoreboard | **In progress:** the sanity test now runs single-lane, error, and 4-beat burst RX sequences (`pcie_pipe_rx_single_lane_seq`, `pcie_pipe_rx_error_seq`, `pcie_pipe_rx_burst_seq`) through the existing mirrored RX scoreboard, in addition to the original all-lane/sparse smoke. Remaining: randomized/constrained RX traffic and RX backpressure. |
 | 5 | Extend functional coverage to RX/TX direction, FIFO occupancy, width conversion, and CRC enable | **RX direction: delivered** — `ucie_rdi_pcie_coverage` now samples the reverse path via `cg_rx_pipe` (PIPE RX stimulus) and `cg_rx_rdi` (RDI RX output), fed from the RX monitors alongside the TX covergroups. Still open: FIFO-occupancy, width-conversion, and CRC-enable coverpoints. |
 | 6 | Add a CRC predictor and broaden CRC coverage | Current smoke coverage validates the lane-0 residue path, but the model is still only a top-level checker. |
 

@@ -6,6 +6,7 @@ All notable changes to this project are documented here. Version tags follow [Se
 
 ### Added
 
+- **UVM RX-path sequences**: Added `pcie_pipe_rx_single_lane_seq`, `pcie_pipe_rx_error_seq`, and `pcie_pipe_rx_burst_seq` to the sequence library and run them in the sanity test, exercising the existing mirrored RX scoreboard with single-lane transport, reverse-path error propagation, and a 4-beat in-order burst (UVM closure plan item 4). Randomized RX traffic and RX backpressure remain open.
 - **UVM RX-direction functional coverage**: `ucie_rdi_pcie_coverage` now collects the reverse (PIPE -> RDI) path through two new covergroups — `cg_rx_pipe` (PIPE RX stimulus entering the DUT) and `cg_rx_rdi` (RDI RX beats leaving the DUT) — wired from the existing RX monitors via new analysis imports. The report now prints `RX_PIPE`/`RX_RDI` percentages alongside the TX numbers (UVM closure plan item 5, RX direction). FIFO-occupancy, width-conversion, and CRC-enable coverpoints remain open.
 
 ### Changed

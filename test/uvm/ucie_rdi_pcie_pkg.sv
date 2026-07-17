@@ -673,6 +673,9 @@ package ucie_rdi_pcie_pkg;
             ucie_rdi_flow_ctrl_seq  fc_seq;
             pcie_pipe_backpressure_seq bp_seq;
             pcie_pipe_rx_seq        rx_seq;
+            pcie_pipe_rx_single_lane_seq rx_single_seq;
+            pcie_pipe_rx_error_seq  rx_err_seq;
+            pcie_pipe_rx_burst_seq  rx_burst_seq;
             ucie_rdi_crc_seq        crc_seq;
 
             phase.raise_objection(this);
@@ -715,6 +718,20 @@ package ucie_rdi_pcie_pkg;
             `uvm_info("TEST", "Starting CRC Sequence", UVM_LOW)
             crc_seq = ucie_rdi_crc_seq::type_id::create("crc_seq");
             crc_seq.start(env.rdi_agent.sqr);
+
+            #100ns;
+
+            `uvm_info("TEST", "Starting RX Single-Lane Sequence", UVM_LOW)
+            rx_single_seq = pcie_pipe_rx_single_lane_seq::type_id::create("rx_single_seq");
+            rx_single_seq.start(env.pipe_rx_agent.sqr);
+
+            `uvm_info("TEST", "Starting RX Error Sequence", UVM_LOW)
+            rx_err_seq = pcie_pipe_rx_error_seq::type_id::create("rx_err_seq");
+            rx_err_seq.start(env.pipe_rx_agent.sqr);
+
+            `uvm_info("TEST", "Starting RX Burst Sequence", UVM_LOW)
+            rx_burst_seq = pcie_pipe_rx_burst_seq::type_id::create("rx_burst_seq");
+            rx_burst_seq.start(env.pipe_rx_agent.sqr);
 
             #1000ns;
             phase.drop_objection(this);

@@ -171,5 +171,70 @@ package ucie_rdi_seq_lib;
         endtask
     endclass
 
+    // --- PIPE RX Single-Lane Sequence ---
+    // Drives a single lane-0 RX beat; lower 16 bits (0xBEEF) are the
+    // payload converted back onto the RDI RX bus.
+    class pcie_pipe_rx_single_lane_seq extends uvm_sequence #(pcie_pipe_transaction);
+        `uvm_object_utils(pcie_pipe_rx_single_lane_seq)
+        function new(string name = "pcie_pipe_rx_single_lane_seq"); super.new(name); endfunction
+
+        virtual task body();
+            pcie_pipe_transaction tr;
+            tr = pcie_pipe_transaction::type_id::create("rx_lane0");
+            start_item(tr);
+            if (!tr.randomize() with {
+                valid == 4'b0001;
+                data == 128'h0000_0000_0000_0000_0000_0000_0000_BEEF;
+                error == 4'b0000;
+            })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+        endtask
+    endclass
+
+    // --- PIPE RX Error Sequence ---
+    // Lane-1 RX beat with error asserted; exercises reverse-path error
+    // propagation (lane 1 occupies data[63:32], low half at [47:32]).
+    class pcie_pipe_rx_error_seq extends uvm_sequence #(pcie_pipe_transaction);
+        `uvm_object_utils(pcie_pipe_rx_error_seq)
+        function new(string name = "pcie_pipe_rx_error_seq"); super.new(name); endfunction
+
+        virtual task body();
+            pcie_pipe_transaction tr;
+            tr = pcie_pipe_transaction::type_id::create("rx_lane1_err");
+            start_item(tr);
+            if (!tr.randomize() with {
+                valid == 4'b0010;
+                data == 128'h0000_0000_0000_0000_0000_CAFE_0000_0000;
+                error == 4'b0010;
+            })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+        endtask
+    endclass
+
+    // --- PIPE RX Burst Sequence ---
+    // Four back-to-back lane-0 beats with incrementing payloads; checks
+    // reverse-path ordering through the RX FIFO via the scoreboard queue.
+    class pcie_pipe_rx_burst_seq extends uvm_sequence #(pcie_pipe_transaction);
+        `uvm_object_utils(pcie_pipe_rx_burst_seq)
+        function new(string name = "pcie_pipe_rx_burst_seq"); super.new(name); endfunction
+
+        virtual task body();
+            pcie_pipe_transaction tr;
+            for (int b = 0; b < 4; b++) begin
+                tr = pcie_pipe_transaction::type_id::create($sformatf("rx_burst_%0d", b));
+                start_item(tr);
+                if (!tr.randomize() with {
+                    valid == 4'b0001;
+                    data == (b + 1);
+                    error == 4'b0000;
+                })
+                    `uvm_error("SEQ", "Randomization failed")
+                finish_item(tr);
+            end
+        endtask
+    endclass
+
 
 endpackage
