@@ -117,6 +117,11 @@ module uvm_test_top;
         .crc_enable(crc_enable)
     );
 
+    // Mirror CRC status onto the TX PIPE interface so functional coverage
+    // can sample crc enable/error alongside the observed PIPE beats.
+    assign pipe_tx_if.crc_enable = crc_enable;
+    assign pipe_tx_if.crc_error  = crc_error;
+
     ucie_rdi_to_pcie_pipe_bridge_assertions #(
         .NUM_LANES(NUM_LANES),
         .RDI_DATA_WIDTH(RDI_DATA_WIDTH),

@@ -59,12 +59,17 @@ package ucie_rdi_pcie_pkg;
         rand logic [PIPE_BUS_WIDTH-1:0] data; // NUM_LANES * PIPE_DATA_WIDTH bits
         rand logic [NUM_LANES-1:0]      error;
         logic [NUM_LANES-1:0]           ready;
+        // Observation-only CRC status (populated by the TX PIPE monitor).
+        logic [NUM_LANES-1:0]           crc_enable;
+        logic [NUM_LANES-1:0]           crc_error;
 
         `uvm_object_utils_begin(pcie_pipe_transaction)
-            `uvm_field_int(valid, UVM_ALL_ON)
-            `uvm_field_int(data,  UVM_ALL_ON)
-            `uvm_field_int(error, UVM_ALL_ON)
-            `uvm_field_int(ready, UVM_ALL_ON)
+            `uvm_field_int(valid,      UVM_ALL_ON)
+            `uvm_field_int(data,       UVM_ALL_ON)
+            `uvm_field_int(error,      UVM_ALL_ON)
+            `uvm_field_int(ready,      UVM_ALL_ON)
+            `uvm_field_int(crc_enable, UVM_ALL_ON)
+            `uvm_field_int(crc_error,  UVM_ALL_ON)
         `uvm_object_utils_end
 
         function new(string name = "pcie_pipe_transaction");
@@ -227,6 +232,8 @@ package ucie_rdi_pcie_pkg;
                     tr.ready = vif.mon_cb.ready;
                     tr.data  = vif.mon_cb.data;
                     tr.error = vif.mon_cb.error;
+                    tr.crc_enable = vif.mon_cb.crc_enable;
+                    tr.crc_error  = vif.mon_cb.crc_error;
                     ap.write(tr);
                 end
             end
@@ -425,6 +432,48 @@ package ucie_rdi_pcie_pkg;
             valid_x_error: cross cp_valid, cp_error;
         endgroup
 
+        // Width conversion (RDI 16-bit -> PIPE 32-bit): sample lane 0's
+        // PIPE word to confirm the upper half is zero-extended and that a
+        // range of payload magnitudes exercise the conversion.
+        covergroup cg_pipe_width with function sample(logic [PIPE_DATA_WIDTH-1:0] lane0_word);
+            option.per_instance = 1;
+            cp_upper: coverpoint lane0_word[RDI_DATA_WIDTH +: (PIPE_DATA_WIDTH-RDI_DATA_WIDTH)] {
+                bins zero_extended = {0};
+                bins nonzero      = default;
+            }
+            cp_low_magnitude: coverpoint lane0_word[0 +: RDI_DATA_WIDTH] {
+                bins zero       = {0};
+                bins byte_range = {[1:(1<<8)-1]};
+                bins word_range = {[(1<<8):(1<<RDI_DATA_WIDTH)-1]};
+            }
+        endgroup
+
+        // FIFO-occupancy proxy: number of RDI lanes asserting flow_ctrl on
+        // a beat. flow_ctrl reflects near-full elastic buffers, so this is
+        // an observable stand-in for internal FIFO occupancy/backpressure.
+        covergroup cg_occupancy with function sample(int unsigned fc_lanes);
+            option.per_instance = 1;
+            cp_fc_lanes: coverpoint fc_lanes {
+                bins none      = {0};
+                bins partial   = {[1:NUM_LANES-1]};
+                bins all_lanes = {NUM_LANES};
+            }
+        endgroup
+
+        // CRC enable/error observed on the TX PIPE interface.
+        covergroup cg_crc with function sample(logic [NUM_LANES-1:0] crc_enable, logic [NUM_LANES-1:0] crc_error);
+            option.per_instance = 1;
+            cp_crc_en: coverpoint crc_enable {
+                bins disabled    = {0};
+                bins any_enabled = {[1:(1<<NUM_LANES)-1]};
+            }
+            cp_crc_err: coverpoint crc_error {
+                bins clean     = {0};
+                bins any_error = {[1:(1<<NUM_LANES)-1]};
+            }
+            crc_en_x_err: cross cp_crc_en, cp_crc_err;
+        endgroup
+
         function new(string name, uvm_component parent);
             super.new(name, parent);
             imp_rdi = new("imp_rdi", this);
@@ -435,14 +484,20 @@ package ucie_rdi_pcie_pkg;
             cg_pipe = new();
             cg_rx_pipe = new();
             cg_rx_rdi = new();
+            cg_pipe_width = new();
+            cg_occupancy = new();
+            cg_crc = new();
         endfunction
 
         function void write_covrdi(ucie_rdi_transaction tr);
             cg_rdi.sample(tr.valid, tr.error, tr.flow_ctrl);
+            cg_occupancy.sample($countones(tr.flow_ctrl));
         endfunction
 
         function void write_covpipe(pcie_pipe_transaction tr);
             cg_pipe.sample(tr.valid, tr.error);
+            cg_pipe_width.sample(tr.data[0 +: PIPE_DATA_WIDTH]);
+            cg_crc.sample(tr.crc_enable, tr.crc_error);
         endfunction
 
         // PIPE RX stimulus entering the DUT (reverse path source).
@@ -458,11 +513,14 @@ package ucie_rdi_pcie_pkg;
         virtual function void report_phase(uvm_phase phase);
             super.report_phase(phase);
             `uvm_info("COV",
-                      $sformatf("UVM coverage: RDI=%0.2f%% PIPE=%0.2f%% RX_PIPE=%0.2f%% RX_RDI=%0.2f%%",
+                      $sformatf("UVM coverage: RDI=%0.2f%% PIPE=%0.2f%% RX_PIPE=%0.2f%% RX_RDI=%0.2f%% WIDTH=%0.2f%% OCC=%0.2f%% CRC=%0.2f%%",
                                 cg_rdi.get_inst_coverage(),
                                 cg_pipe.get_inst_coverage(),
                                 cg_rx_pipe.get_inst_coverage(),
-                                cg_rx_rdi.get_inst_coverage()),
+                                cg_rx_rdi.get_inst_coverage(),
+                                cg_pipe_width.get_inst_coverage(),
+                                cg_occupancy.get_inst_coverage(),
+                                cg_crc.get_inst_coverage()),
                       UVM_LOW)
         endfunction
     endclass

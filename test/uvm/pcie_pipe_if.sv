@@ -12,6 +12,10 @@ interface pcie_pipe_if #(
     logic [NUM_LANES-1:0]      ready;
     logic [NUM_LANES*DATA_WIDTH-1:0] data;
     logic [NUM_LANES-1:0]      error;
+    // CRC status (observation only; driven from the top for the TX PIPE
+    // interface so functional coverage can sample crc enable/error).
+    logic [NUM_LANES-1:0]      crc_enable;
+    logic [NUM_LANES-1:0]      crc_error;
 
     // Driver Clocking Block (for RX path testing)
     clocking drv_cb @(posedge clk);
@@ -38,6 +42,8 @@ interface pcie_pipe_if #(
         input ready;
         input data;
         input error;
+        input crc_enable;
+        input crc_error;
     endclocking
 
     modport drv (clocking drv_cb, input clk, rst_n);
