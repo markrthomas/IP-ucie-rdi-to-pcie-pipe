@@ -10,7 +10,7 @@ This guide describes the UVM environment in `test/uvm/` as it exists in this rep
 | DUT parameters | Fixed 4 lanes, 16-bit RDI, 32-bit PIPE, FIFO depth 16 | The RTL is parameterized; the UVM transaction classes and scoreboard are currently fixed-width. |
 | TX path (`RDI -> PIPE`) | Stimulated and scoreboarding enabled | Active RDI agent drives requests; passive PIPE monitor observes accepted beats. |
 | RX path (`PIPE -> RDI`) | Wired with passive monitors and a smoke RX driver, with basic checking | `uvm_test_top` instantiates RX interfaces, binds passive RX monitors, and the sanity test now runs a small PIPE RX sequence through `pipe_rx_agent`. |
-| CRC | Disabled | `crc_enable` is tied to `4'b0`; use the non-UVM smoke test for current CRC checking. |
+| CRC | Enabled for the smoke sequence | `uvm_test_top` now toggles `crc_enable` for a lane-0 CRC smoke run and mirrors the residue check. |
 | Backpressure | PIPE TX ready is agent-controlled in the sanity test | The backpressure sequence now drives `ready` low/high/low/high with longer stalls; FIFO-full behavior is still a future extension because the RDI source driver remains handshake-gated. |
 | Assertions | Compiled and active in the UVM top | CDC monitor/statistics now run in both the UVM flow and the non-UVM regression. |
 
@@ -21,8 +21,8 @@ flowchart LR
     subgraph TOP[uvm_test_top]
         RDI_IF[ucie_rdi_if\nTX virtual interface]
         PIPE_IF[pcie_pipe_if\nTX virtual interface]
-        RX_RDI_IF[ucie_rdi_if\nRX wired idle]
-        RX_PIPE_IF[pcie_pipe_if\nRX wired idle]
+        RX_RDI_IF[ucie_rdi_if\nRX monitor path]
+        RX_PIPE_IF[pcie_pipe_if\nRX smoke path]
         DUT[ucie_rdi_to_pcie_pipe_bridge]
     end
 
@@ -100,6 +100,7 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 | `ucie_rdi_multi_lane_seq` | One all-lane beat with lane-specific 16-bit words | Lane packing and independent per-lane queueing | Same per lane with observed PIPE handshake. |
 | `ucie_rdi_error_seq` | Lane-2 valid with `error[2] == 1` | Error propagation | **Error bit compared** on observed PIPE beats (with data/zero-extension checks). |
 | `ucie_rdi_flow_ctrl_seq` | Thirty-two lane-1 beats | Repeated traffic through FIFO | Data order checked if PIPE accepts all beats; paired with a backpressure sequence in the sanity test. |
+| `ucie_rdi_crc_seq` | Two lane-0 beats with CRC enabled | CRC residue smoke | `crc_enable[0]` is asserted around the sequence and the UVM top mirrors the residue compare. |
 | `pcie_pipe_backpressure_seq` | PIPE ready low/high/low/high | PIPE stall / release behavior | Drives `ready` low for 48 cycles, releases for 16, reasserts low for 16, then releases for 24. |
 | `pcie_pipe_rx_seq` | PIPE RX valid/data/error beats | PIPE -> RDI conversion and ordering | Mirrored RX queueing checks lower-half data and error propagation on accepted RX beats. |
 
@@ -122,7 +123,7 @@ The monitor and scoreboard operate per accepted beat, not per raw cycle. Because
 | 3 | Expand PIPE backpressure coverage and decouple passive vs. active ready control | Required to verify FIFO full, `rdi_flow_ctrl`, and hold-under-stall behavior in UVM. |
 | 4 | Expand RX path sequences and mirrored RDI RX scoreboard | The RTL includes `PIPE -> RDI`; current UVM now exercises a smoke sequence but still needs deeper RX closure. |
 | 5 | Extend functional coverage to RX/TX direction, FIFO occupancy, width conversion, and CRC enable | Provides measurable closure beyond pass/fail simulation. |
-| 6 | Add CRC sequences with scoreboard mirror or predictor | Current CRC confidence comes from the non-UVM testbench only. |
+| 6 | Add a CRC predictor and broaden CRC coverage | Current smoke coverage validates the lane-0 residue path, but the model is still only a top-level checker. |
 
 ## Run commands
 

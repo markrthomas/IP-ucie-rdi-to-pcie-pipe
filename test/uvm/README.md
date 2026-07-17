@@ -55,7 +55,7 @@ graph TD
 | Parameters | Fixed in UVM at 4 lanes, 16-bit RDI, 32-bit PIPE |
 | TX path | Stimulated and checked at smoke level |
 | RX path | Interfaces, passive monitors, and an RX smoke path are instantiated |
-| CRC | Disabled in `uvm_test_top` |
+| CRC | Enabled for the UVM smoke sequence |
 | PIPE backpressure | Active pipe-agent mode can drive multi-phase `ready` stalls for the sanity test |
 | Assertions | Compiled and active in the UVM top |
 
@@ -99,8 +99,8 @@ sequenceDiagram
 | PIPE upper 16 bits are zero | Yes | Checked against zero-extension for accepted PIPE beats. |
 | Error propagation | Yes | Compared for each accepted lane beat vs. queued RDI expectation. |
 | Queue empty at end of test | Yes | `check_phase` fails with `SB_DRAIN` if TX queues remain non-empty. |
-| RX path | No | `pipe_rx_if.valid` is tied low; RX monitors are passive. |
-| CRC | No | `crc_enable` is tied low. |
+| RX path | Partial | RX smoke path exists, but full mirrored RX closure is still open. |
+| CRC | Partial | `crc_enable` is toggled for the smoke sequence; predictor still open. |
 
 ## 3. Test Library
 
@@ -114,6 +114,7 @@ sequenceDiagram
 *   `ucie_rdi_multi_lane_seq`: Drives all 4 lanes simultaneously.
 *   `ucie_rdi_error_seq`: Verifies propagation of the `rdi_error` bit.
 *   `ucie_rdi_flow_ctrl_seq`: Sends 32 consecutive lane-1 beats.
+*   `ucie_rdi_crc_seq`: Drives the lane-0 CRC smoke pattern while `crc_enable` is asserted.
 *   `pcie_pipe_backpressure_seq`: Drives PIPE `ready` low/high/low/high while the flow-control sequence is running.
 *   `pcie_pipe_rx_seq`: Drives a small PIPE RX smoke sequence and checks the mirrored RX queue.
 
@@ -125,6 +126,7 @@ sequenceDiagram
 | `ucie_rdi_multi_lane_seq` | `1111` | `64'hDDDD_CCCC_BBBB_AAAA` | `0000` | All-lane packing and independent lane queues. |
 | `ucie_rdi_error_seq` | `0100` | `64'hEEEE_1234_0000_0000` | `0100` | Error propagation stimulus. |
 | `ucie_rdi_flow_ctrl_seq` | `0010` | `64'h0000_0000_1234_0000` | `0000` | Repeated lane-1 FIFO traffic. |
+| `ucie_rdi_crc_seq` | `0001` | `64'h0000_0000_0000_0001` / `64'h0000_0000_0000_0002` | `0000` | CRC residue smoke coverage on lane 0. |
 | `pcie_pipe_backpressure_seq` | `1111` | N/A | N/A | Multi-phase PIPE ready stall and release control. |
 | `pcie_pipe_rx_seq` | `1111` | `128'h1111_0001_2222_0002_3333_0003_4444_0004` | `0000` | PIPE RX smoke coverage with mirrored RX queueing. |
 
@@ -155,5 +157,5 @@ make -f Makefile.vcs pdf
 | :---: | :--- |
 | 1 | Expand PIPE ready/backpressure control into richer FIFO-full and flow-control coverage. |
 | 2 | Expand RX smoke stimulus and mirrored scoreboard checks. |
-| 3 | Add CRC enable sequences and a CRC predictor. |
+| 3 | Add a CRC predictor and broader CRC coverage. |
 | 4 | Add functional coverage groups for RX/TX direction, FIFO occupancy, width conversion, and CRC scenarios. |

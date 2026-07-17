@@ -605,6 +605,7 @@ package ucie_rdi_pcie_pkg;
             ucie_rdi_flow_ctrl_seq  fc_seq;
             pcie_pipe_backpressure_seq bp_seq;
             pcie_pipe_rx_seq        rx_seq;
+            ucie_rdi_crc_seq        crc_seq;
 
             phase.raise_objection(this);
             
@@ -642,6 +643,10 @@ package ucie_rdi_pcie_pkg;
                     rx_seq.start(env.pipe_rx_agent.sqr);
                 end
             join
+
+            `uvm_info("TEST", "Starting CRC Sequence", UVM_LOW)
+            crc_seq = ucie_rdi_crc_seq::type_id::create("crc_seq");
+            crc_seq.start(env.rdi_agent.sqr);
 
             #1000ns;
             phase.drop_objection(this);

@@ -78,6 +78,35 @@ package ucie_rdi_seq_lib;
         endtask
     endclass
 
+    // --- CRC Smoke Sequence ---
+    class ucie_rdi_crc_seq extends ucie_rdi_base_seq;
+        `uvm_object_utils(ucie_rdi_crc_seq)
+        function new(string name = "ucie_rdi_crc_seq"); super.new(name); endfunction
+
+        virtual task body();
+            uvm_event_pool event_pool;
+            ucie_rdi_transaction tr;
+
+            event_pool = uvm_event_pool::get_global_pool();
+            event_pool.get("crc_start").trigger();
+
+            tr = ucie_rdi_transaction::type_id::create("crc_beat_0");
+            start_item(tr);
+            if (!tr.randomize() with { valid == 4'b0001; data == 64'h0000_0000_0000_0001; error == 4'b0000; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+
+            tr = ucie_rdi_transaction::type_id::create("crc_beat_1");
+            start_item(tr);
+            if (!tr.randomize() with { valid == 4'b0001; data == 64'h0000_0000_0000_0002; error == 4'b0000; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+
+            #100ns;
+            event_pool.get("crc_stop").trigger();
+        endtask
+    endclass
+
     // --- PIPE Backpressure Sequence ---
     class pcie_pipe_backpressure_seq extends uvm_sequence #(pcie_pipe_ready_transaction);
         `uvm_object_utils(pcie_pipe_backpressure_seq)

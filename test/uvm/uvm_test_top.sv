@@ -10,6 +10,9 @@ module uvm_test_top;
     logic rdi_clk;
     logic pipe_clk;
     logic rst_n;
+    logic [3:0] crc_enable;
+    logic [3:0] crc_error;
+    localparam logic [31:0] CRC_RESIDUE = 32'h1704_7432;
 
     // --- Clock Generation ---
     initial begin
@@ -34,6 +37,45 @@ module uvm_test_top;
     
     ucie_rdi_if #(.DATA_WIDTH(16), .NUM_LANES(4)) rdi_rx_if (.clk(rdi_clk), .rst_n(rst_n));
     pcie_pipe_if #(.DATA_WIDTH(32), .NUM_LANES(4)) pipe_rx_if (.clk(pipe_clk), .rst_n(rst_n));
+
+    function automatic logic [31:0] tb_crc32_step(
+        input logic [31:0] data_in,
+        input logic [31:0] crc_in
+    );
+        logic [31:0] crc_temp;
+        logic fb;
+        crc_temp = crc_in;
+        for (int i = 0; i < 32; i++) begin
+            fb = crc_temp[31] ^ data_in[i];
+            crc_temp = crc_temp << 1;
+            if (fb) crc_temp = crc_temp ^ 32'h04C1_1DB7;
+        end
+        return crc_temp;
+    endfunction
+
+    logic [31:0] tb_crc_lane0;
+    always_ff @(posedge pipe_clk or negedge rst_n) begin
+        if (!rst_n) begin
+            tb_crc_lane0 <= 32'hFFFF_FFFF;
+        end else if (!crc_enable[0]) begin
+            tb_crc_lane0 <= 32'hFFFF_FFFF;
+        end else if (crc_enable[0] && pipe_tx_if.valid[0] && pipe_tx_if.ready[0]) begin
+            tb_crc_lane0 <= tb_crc32_step(pipe_tx_if.data[31:0], tb_crc_lane0);
+        end
+    end
+
+    always_ff @(negedge pipe_clk) begin
+        if (!rst_n) begin
+        end else if (crc_enable[0]) begin
+            if (crc_error[0] != (tb_crc_lane0 != CRC_RESIDUE)) begin
+                uvm_error("CRC_CHK",
+                          $sformatf("Lane 0 crc_error=%b vs model (tb_crc=%h residue_ok=%b)",
+                                    crc_error[0],
+                                    tb_crc_lane0,
+                                    (tb_crc_lane0 == CRC_RESIDUE)));
+            end
+        end
+    end
 
     // --- DUT Instantiation ---
     ucie_rdi_to_pcie_pipe_bridge #(
@@ -71,8 +113,8 @@ module uvm_test_top;
         .pipe_rx_data(pipe_rx_if.data),
         .pipe_rx_error(pipe_rx_if.error),
 
-        .crc_error(),
-        .crc_enable(4'b0)
+        .crc_error(crc_error),
+        .crc_enable(crc_enable)
     );
 
     ucie_rdi_to_pcie_pipe_bridge_assertions #(
@@ -113,8 +155,18 @@ module uvm_test_top;
         pipe_tx_if.ready = 4'b1111;
         rdi_rx_if.ready = 4'b1111;
         pipe_rx_if.valid = 4'b0000;
+        crc_enable = 4'b0000;
 
         run_test();
+    end
+
+    initial begin
+        uvm_event_pool event_pool;
+        event_pool = uvm_event_pool::get_global_pool();
+        event_pool.get("crc_start").wait_trigger();
+        crc_enable[0] = 1'b1;
+        event_pool.get("crc_stop").wait_trigger();
+        crc_enable[0] = 1'b0;
     end
 
     final begin
