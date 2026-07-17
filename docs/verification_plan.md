@@ -67,7 +67,7 @@ The UVM environment is intentionally separated from the Verilator smoke regressi
 | UVM area | Present today | Recommended next check |
 |----------|---------------|------------------------|
 | RDI active agent | Drives fixed-width 4-lane TX transactions | Add parameter/config object for lane and data widths. |
-| PIPE passive/active agent | Monitors TX PIPE accepts and can drive `ready` in active mode | Add richer FIFO-full/backpressure coverage and a cleaner mode switch. |
+| PIPE passive/active agent | Monitors TX PIPE accepts and can drive `ready` in active mode | Deep backpressure + all-lane FIFO-fill now drive every TX FIFO to full with a scoreboard `SB_FIFO_FULL` check; remaining polish is a cleaner passive/active mode switch. |
 | Scoreboard | Per-lane TX queues, **`valid & ready`** gating, lower **and upper (zero)** 16-bit data compare, **error** compare, **`check_phase` queue drain** | Functional coverage; RX path scoreboard; CRC predictor |
 | RX path | DUT, interfaces, passive monitors, and an active PIPE RX smoke path are wired | Expand RX stimulus and mirrored scoreboard checks. |
 | CRC | Enabled for the UVM smoke sequence | Add a CRC predictor and broader CRC coverage. |
@@ -101,7 +101,7 @@ Priorities for higher confidence:
 4. **Formal** — Async FIFO invariants + handshake properties (tool-specific).  
 5. **PIPE policy (optional)** — Strict **`valid`⇒data hold** RTL + monitor if integrators require it.
 
-**Delivered in-tree:** Scoreboard; FIFO stress + CRC checker in TB; **`regress_cov`** flow; NL1 deep FIFO + RX pulse; UVM scoreboard drain check, per-lane **`valid & ready`** queueing, zero-extension and **error** compare on PIPE observations; UVM CDC assertions/statistics bind; richer UVM PIPE backpressure sequencing; initial UVM functional coverage collector; initial RX smoke path and mirrored RX queueing; lane-0 CRC smoke sequencing with a mirrored residue check.
+**Delivered in-tree:** Scoreboard; FIFO stress + CRC checker in TB; **`regress_cov`** flow; NL1 deep FIFO + RX pulse; UVM scoreboard drain check, per-lane **`valid & ready`** queueing, zero-extension and **error** compare on PIPE observations; UVM CDC assertions/statistics bind; richer UVM PIPE backpressure sequencing; initial UVM functional coverage collector; initial RX smoke path and mirrored RX queueing; lane-0 CRC smoke sequencing with a mirrored residue check; UVM all-lane TX FIFO-full closure (cycle-accurate flow-control monitor path, deep backpressure + all-lane fill sequences, and an `SB_FIFO_FULL` scoreboard check that proves the full condition was reached with in-order drain).
 
 ## Exit criteria (smoke + lint)
 

@@ -11,8 +11,10 @@ package ucie_rdi_pcie_pkg;
     `uvm_analysis_imp_decl(_covpipe)
     `uvm_analysis_imp_decl(_covrxrdi)
     `uvm_analysis_imp_decl(_covrxpipe)
+    `uvm_analysis_imp_decl(_covfc)
     `uvm_analysis_imp_decl(_rxrdi)
     `uvm_analysis_imp_decl(_rxpipe)
+    `uvm_analysis_imp_decl(_fc)
 
     // ------------------------------------------------------------------
     // Centralized DUT dimensions -- single source of truth for the UVM
@@ -82,7 +84,11 @@ package ucie_rdi_pcie_pkg;
         rand logic [NUM_LANES-1:0] ready;
         rand int unsigned hold_cycles;
 
-        constraint c_hold_cycles { hold_cycles inside {[1:32]}; }
+        // Upper bound must cover the longest programmed stall. Sequences add
+        // an `== N` equality in `randomize() with {}` (which narrows, not
+        // overrides, this range), so this must stay >= the largest hold any
+        // sequence requests (deep FIFO-fill backpressure uses hundreds).
+        constraint c_hold_cycles { hold_cycles inside {[1:1024]}; }
 
         `uvm_object_utils_begin(pcie_pipe_ready_transaction)
             `uvm_field_int(ready,       UVM_ALL_ON)
@@ -144,12 +150,21 @@ package ucie_rdi_pcie_pkg;
     class ucie_rdi_monitor extends uvm_monitor;
         virtual ucie_rdi_if vif;
         uvm_analysis_port #(ucie_rdi_transaction) ap;
+        // Cycle-accurate flow-control port. Publishes flow_ctrl whenever it
+        // changes, NOT gated on the valid&ready handshake. This is required
+        // to observe FIFO-full: rdi_ready and rdi_flow_ctrl are per-lane
+        // complements, so a full lane deasserts ready and the handshake-gated
+        // `ap` above can never emit a beat while flow_ctrl is asserted.
+        // Only the TX RDI monitor's fc_ap is connected in the env; the RX
+        // RDI monitor leaves it unconnected (its flow_ctrl is not driven).
+        uvm_analysis_port #(ucie_rdi_transaction) fc_ap;
 
         `uvm_component_utils(ucie_rdi_monitor)
 
         function new(string name, uvm_component parent);
             super.new(name, parent);
             ap = new("ap", this);
+            fc_ap = new("fc_ap", this);
         endfunction
 
         virtual function void build_phase(uvm_phase phase);
@@ -159,8 +174,21 @@ package ucie_rdi_pcie_pkg;
         endfunction
 
         virtual task run_phase(uvm_phase phase);
+            logic [NUM_LANES-1:0] fc_prev = 'x;
             forever begin
                 @(vif.mon_cb);
+                // Edge-triggered flow-control sample (bounds object churn
+                // while still capturing the none/partial/all-lanes states).
+                if (vif.mon_cb.flow_ctrl !== fc_prev) begin
+                    ucie_rdi_transaction fc = ucie_rdi_transaction::type_id::create("fc");
+                    fc.valid     = vif.mon_cb.valid;
+                    fc.ready     = vif.mon_cb.ready;
+                    fc.data      = vif.mon_cb.data;
+                    fc.error     = vif.mon_cb.error;
+                    fc.flow_ctrl = vif.mon_cb.flow_ctrl;
+                    fc_ap.write(fc);
+                    fc_prev = vif.mon_cb.flow_ctrl;
+                end
                 if (vif.mon_cb.valid != 0 && (vif.mon_cb.valid & vif.mon_cb.ready) != 0) begin
                     ucie_rdi_transaction tr = ucie_rdi_transaction::type_id::create("tr");
                     tr.valid = vif.mon_cb.valid;
@@ -405,6 +433,9 @@ package ucie_rdi_pcie_pkg;
         uvm_analysis_imp_covpipe #(pcie_pipe_transaction, ucie_rdi_pcie_coverage) imp_pipe;
         uvm_analysis_imp_covrxrdi #(ucie_rdi_transaction, ucie_rdi_pcie_coverage) imp_rx_rdi;
         uvm_analysis_imp_covrxpipe #(pcie_pipe_transaction, ucie_rdi_pcie_coverage) imp_rx_pipe;
+        // Cycle-accurate flow-control samples (from the TX RDI monitor's
+        // fc_ap), so occupancy coverage can reach the partial/all-lanes bins.
+        uvm_analysis_imp_covfc #(ucie_rdi_transaction, ucie_rdi_pcie_coverage) imp_fc;
 
         `uvm_component_utils(ucie_rdi_pcie_coverage)
 
@@ -483,8 +514,11 @@ package ucie_rdi_pcie_pkg;
         endgroup
 
         // FIFO-occupancy proxy: number of RDI lanes asserting flow_ctrl on
-        // a beat. flow_ctrl reflects near-full elastic buffers, so this is
-        // an observable stand-in for internal FIFO occupancy/backpressure.
+        // a sampled cycle. flow_ctrl == tx_full reflects a full elastic
+        // buffer, so this is an observable stand-in for internal FIFO
+        // occupancy/backpressure. Sampled from the fc_ap flow-control path
+        // (not the handshake-gated beat path), so the near-full states are
+        // actually reachable.
         covergroup cg_occupancy with function sample(int unsigned fc_lanes);
             option.per_instance = 1;
             cp_fc_lanes: coverpoint fc_lanes {
@@ -514,6 +548,7 @@ package ucie_rdi_pcie_pkg;
             imp_pipe = new("imp_pipe", this);
             imp_rx_rdi = new("imp_rx_rdi", this);
             imp_rx_pipe = new("imp_rx_pipe", this);
+            imp_fc = new("imp_fc", this);
             cg_rdi = new();
             cg_pipe = new();
             cg_rx_pipe = new();
@@ -525,6 +560,12 @@ package ucie_rdi_pcie_pkg;
 
         function void write_covrdi(ucie_rdi_transaction tr);
             cg_rdi.sample(tr.valid, tr.error, tr.flow_ctrl);
+        endfunction
+
+        // Cycle-accurate flow-control samples: occupancy is measured here
+        // (from fc_ap) rather than from write_covrdi, because a full lane
+        // deasserts rdi_ready and therefore never produces a handshake beat.
+        function void write_covfc(ucie_rdi_transaction tr);
             cg_occupancy.sample($countones(tr.flow_ctrl));
         endfunction
 
@@ -597,10 +638,18 @@ package ucie_rdi_pcie_pkg;
         uvm_analysis_imp_pipe #(pcie_pipe_transaction, ucie_rdi_pcie_scoreboard) imp_pipe;
         uvm_analysis_imp_rxrdi #(ucie_rdi_transaction, ucie_rdi_pcie_scoreboard) imp_rx_rdi;
         uvm_analysis_imp_rxpipe #(pcie_pipe_transaction, ucie_rdi_pcie_scoreboard) imp_rx_pipe;
+        // Cycle-accurate flow-control samples from the TX RDI monitor.
+        uvm_analysis_imp_fc #(ucie_rdi_transaction, ucie_rdi_pcie_scoreboard) imp_fc;
 
         // Expectation queues per lane
         ucie_rdi_transaction tx_exp_q[NUM_LANES][$];
         ucie_rdi_transaction rx_exp_q[NUM_LANES][$];
+
+        // Flow-control / FIFO-full observation. Set expect_fifo_full when a
+        // deep-fill sequence runs so check_phase proves the DUT actually
+        // asserted flow_ctrl on every lane (i.e. FIFO-full was reached).
+        bit          expect_fifo_full = 0;
+        int unsigned max_fc_lanes_seen = 0;
 
         `uvm_component_utils(ucie_rdi_pcie_scoreboard)
 
@@ -610,6 +659,14 @@ package ucie_rdi_pcie_pkg;
             imp_pipe = new("imp_pipe", this);
             imp_rx_rdi = new("imp_rx_rdi", this);
             imp_rx_pipe = new("imp_rx_pipe", this);
+            imp_fc = new("imp_fc", this);
+        endfunction
+
+        // Track the peak per-lane flow_ctrl (FIFO-full) occupancy observed.
+        function void write_fc(ucie_rdi_transaction tr);
+            int unsigned fc_lanes = $countones(tr.flow_ctrl);
+            if (fc_lanes > max_fc_lanes_seen)
+                max_fc_lanes_seen = fc_lanes;
         endfunction
 
         function void write_rdi(ucie_rdi_transaction tr);
@@ -692,6 +749,15 @@ package ucie_rdi_pcie_pkg;
                                                          i, rx_exp_q[i].size()))
                 end
             end
+            // If a deep-fill sequence armed the FIFO-full expectation, prove
+            // every lane's TX FIFO actually reached full (flow_ctrl on all
+            // lanes). Otherwise the backpressure stimulus never exercised the
+            // full/hold-under-stall path and the pass is hollow.
+            if (expect_fifo_full && max_fc_lanes_seen < NUM_LANES) begin
+                `uvm_error("SB_FIFO_FULL",
+                           $sformatf("Expected all %0d lanes to assert flow_ctrl (FIFO full) but peak was %0d lane(s)",
+                                     NUM_LANES, max_fc_lanes_seen))
+            end
         endfunction
     endclass
 
@@ -736,6 +802,11 @@ package ucie_rdi_pcie_pkg;
             pipe_agent.mon.ap.connect(cov.imp_pipe);
             pipe_rx_mon.ap.connect(cov.imp_rx_pipe);
             rdi_rx_mon.ap.connect(cov.imp_rx_rdi);
+            // Flow-control (FIFO-full) path: only the TX RDI monitor drives a
+            // meaningful flow_ctrl, so only its fc_ap is subscribed. The RX
+            // RDI monitor's fc_ap is intentionally left unconnected.
+            rdi_agent.mon.fc_ap.connect(cov.imp_fc);
+            rdi_agent.mon.fc_ap.connect(sb.imp_fc);
         endfunction
     endclass
 
@@ -769,6 +840,8 @@ package ucie_rdi_pcie_pkg;
             ucie_rdi_error_seq      err_seq;
             ucie_rdi_flow_ctrl_seq  fc_seq;
             pcie_pipe_backpressure_seq bp_seq;
+            ucie_rdi_fifo_full_seq  fifo_full_seq;
+            pcie_pipe_deep_backpressure_seq deep_bp_seq;
             pcie_pipe_rx_seq        rx_seq;
             pcie_pipe_rx_single_lane_seq rx_single_seq;
             pcie_pipe_rx_error_seq  rx_err_seq;
@@ -813,6 +886,24 @@ package ucie_rdi_pcie_pkg;
                     rx_seq.start(env.pipe_rx_agent.sqr);
                 end
             join
+
+            `uvm_info("TEST", "Starting All-Lane FIFO-Full Sequence", UVM_LOW)
+            // Arm the scoreboard's FIFO-full expectation: the deep backpressure
+            // + all-lane fill must drive rdi_flow_ctrl on every lane, and the
+            // beats must still drain in order once ready is released.
+            env.sb.expect_fifo_full = 1;
+            fork
+                begin
+                    deep_bp_seq = pcie_pipe_deep_backpressure_seq::type_id::create("deep_bp_seq");
+                    deep_bp_seq.start(env.pipe_agent.sqr);
+                end
+                begin
+                    #20ns;
+                    fifo_full_seq = ucie_rdi_fifo_full_seq::type_id::create("fifo_full_seq");
+                    fifo_full_seq.start(env.rdi_agent.sqr);
+                end
+            join
+            #500ns;
 
             `uvm_info("TEST", "Starting CRC Sequence", UVM_LOW)
             crc_seq = ucie_rdi_crc_seq::type_id::create("crc_seq");

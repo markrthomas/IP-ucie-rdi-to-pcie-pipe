@@ -78,6 +78,35 @@ package ucie_rdi_seq_lib;
         endtask
     endclass
 
+    // --- FIFO-Full Sequence (all lanes) ---
+    // Drives all NUM_LANES simultaneously for more beats than the TX FIFO can
+    // hold (BUFFER_DEPTH=16 + one output register). Paired with a deep PIPE
+    // backpressure so the read side never drains: every lane's TX FIFO fills,
+    // asserting rdi_flow_ctrl on all lanes and stalling the driver
+    // (hold-under-stall). Per-lane payloads are distinct and increment per
+    // beat so the scoreboard also proves in-order, lossless drain once ready
+    // is released.
+    class ucie_rdi_fifo_full_seq extends ucie_rdi_base_seq;
+        `uvm_object_utils(ucie_rdi_fifo_full_seq)
+        function new(string name = "ucie_rdi_fifo_full_seq"); super.new(name); endfunction
+
+        virtual task body();
+            ucie_rdi_transaction tr;
+            for (int b = 0; b < 24; b++) begin
+                logic [RDI_BUS_WIDTH-1:0] payload;
+                for (int i = 0; i < NUM_LANES; i++) begin
+                    payload[i*RDI_DATA_WIDTH +: RDI_DATA_WIDTH] =
+                        (b * NUM_LANES) + i + 1;
+                end
+                tr = ucie_rdi_transaction::type_id::create($sformatf("fifo_full_%0d", b));
+                start_item(tr);
+                if (!tr.randomize() with { valid == '1; data == payload; error == '0; })
+                    `uvm_error("SEQ", "Randomization failed")
+                finish_item(tr);
+            end
+        endtask
+    endclass
+
     // --- CRC Smoke Sequence ---
     class ucie_rdi_crc_seq extends ucie_rdi_base_seq;
         `uvm_object_utils(ucie_rdi_crc_seq)
@@ -136,6 +165,32 @@ package ucie_rdi_seq_lib;
             tr = pcie_pipe_ready_transaction::type_id::create("final_release");
             start_item(tr);
             if (!tr.randomize() with { ready == 4'b1111; hold_cycles == 24; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+        endtask
+    endclass
+
+    // --- Deep PIPE Backpressure Sequence ---
+    // Holds PIPE TX ready low long enough for a sustained RDI source to fill
+    // every lane's TX FIFO (drives rdi_flow_ctrl on all lanes), then releases
+    // ready for an extended window so the FIFOs fully drain. Pair with
+    // ucie_rdi_fifo_full_seq on the RDI TX sequencer.
+    class pcie_pipe_deep_backpressure_seq extends uvm_sequence #(pcie_pipe_ready_transaction);
+        `uvm_object_utils(pcie_pipe_deep_backpressure_seq)
+        function new(string name = "pcie_pipe_deep_backpressure_seq"); super.new(name); endfunction
+
+        virtual task body();
+            pcie_pipe_ready_transaction tr;
+
+            tr = pcie_pipe_ready_transaction::type_id::create("deep_hold_low");
+            start_item(tr);
+            if (!tr.randomize() with { ready == 4'b0000; hold_cycles == 128; })
+                `uvm_error("SEQ", "Randomization failed")
+            finish_item(tr);
+
+            tr = pcie_pipe_ready_transaction::type_id::create("deep_release");
+            start_item(tr);
+            if (!tr.randomize() with { ready == 4'b1111; hold_cycles == 400; })
                 `uvm_error("SEQ", "Randomization failed")
             finish_item(tr);
         endtask
