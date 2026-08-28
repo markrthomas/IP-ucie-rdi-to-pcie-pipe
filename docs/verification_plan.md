@@ -108,3 +108,25 @@ Priorities for higher confidence:
 - `make lint` completes with no Verilator warnings promoted to errors (TB pass waives `SYNCASYNCNET` only).  
 - `make regress` (or `make verilator`) runs to `$finish` with **`[SCOREBOARD] PASS`** and no unexpected CDC `$warning` from monitors.  
 - Transfer counts remain consistent between RDI (`valid && ready`) and PIPE (`valid && ready`) sides per lane for the smoke stimulus (modulo error-statistics caveat above).
+
+## Task — OSS Verilator UVM port (license-free CI) — BLOCKED, needs refactor
+
+**Added 2026-08-28.** Goal: run the UVM env (`test/uvm`) under open-source
+Verilator 5.050 (+ bundled Accellera UVM) in CI — a license-free path matching
+the sibling bridge repos. Pattern: `test/uvm/vlt/` (Makefile + empty
+`uvm_macros.svh` include-shim) + a GitHub Actions workflow that builds Verilator
+from source, installs **z3** (Verilator's SMT solver for `randomize()`; without
+it constrained randomize returns 0) and `ccache`, then `--lint-only` + a
+`--binary` smoke run of `ucie_rdi_pcie_base_test`.
+
+**Blocked on Verilator-incompatible structure (Xcelium tolerates, Verilator rejects):**
+- **Circular package import:** `ucie_rdi_pcie_pkg` `import`s `ucie_rdi_seq_lib`
+  (line ~813) and `ucie_rdi_seq_lib` `import`s `ucie_rdi_pcie_pkg` — Verilator
+  errors `Recursive multiple modules`. Break the cycle: move the test classes
+  (which need the sequences) out of `ucie_rdi_pcie_pkg` into their own package
+  that imports both, so neither base package imports the other.
+- **Reserved word as covergroup bin:** `bins medium` in `ucie_rdi_pcie_pkg`
+  (`medium` is a reserved SV charge-strength keyword) — rename (e.g. `mid`).
+
+**Exit:** `make -C test/uvm/vlt lint` clean, then a `--binary` smoke reaching a
+clean `$finish` with `UVM_ERROR==0 && UVM_FATAL==0` in CI.
