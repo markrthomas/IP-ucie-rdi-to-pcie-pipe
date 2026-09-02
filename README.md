@@ -341,6 +341,9 @@ The **scoreboard** (`tb_ucie_rdi_to_pcie_pipe_scoreboard.sv`) checks each PIPE a
 7. **Formal Verification**: Formal property checks (yosys/SMT)
 8. **AXI Wrapper**: Optional AXI4 streaming interface
 
+## Future Enhancements Schedule
+- **Targeted at the week of 15 Sept. 2026
+
 ## Troubleshooting
 
 ### Simulation Won't Compile
