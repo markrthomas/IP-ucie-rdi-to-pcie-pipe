@@ -62,6 +62,11 @@ IP-ucie-rdi-to-pcie-pipe/
 
 Tag releases with e.g. `git tag -a v1.0.4 -m "Release v1.0.4"` after validating `make regress`.
 
+This repo's `make` targets follow the cross-repo convention in
+[`DV_STANDARDS.md`](DV_STANDARDS.md); underscore targets (`regress_cov`, etc.)
+also have hyphenated aliases (`regress-cov`, etc.) for consistency with sibling
+repos.
+
 ## Architecture Overview
 
 ### Block Diagram
