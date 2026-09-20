@@ -1,5 +1,5 @@
 
-.PHONY: all check ci clean coverage coverage_summary docs_check docs_pdf formal help lint nl1 quick regress regress_all regress_cov regress_nl1 repo_status sim simv smoke test uvm uvm_compile uvm_pdf uvm_run verilator verilator_cov verilator_debug verilator_nl1 vivado wave xsim questa
+.PHONY: all check ci clean coverage coverage_summary coverage-summary docs_check docs-check docs_pdf formal help lint nl1 quick regress regress_all regress-all regress_cov regress-cov regress_nl1 regress-nl1 repo_status repo-status sim simv smoke test uvm uvm_compile uvm_pdf uvm_run verilator verilator_cov verilator_debug verilator_nl1 vivado wave xsim questa
 
 VERILATOR ?= $(shell command -v verilator_bin 2>/dev/null || command -v verilator 2>/dev/null)
 VERILATOR_ROOT := $(shell if [ -n "$(VERILATOR)" ]; then realpath "$$(dirname "$(VERILATOR)")/../share/verilator"; fi)
@@ -36,6 +36,14 @@ nl1: regress_nl1
 # Standard DV gate aliases (consistent with other RTL repos).
 # coverage: alias for regress_cov (Verilator line coverage).
 coverage: regress_cov
+
+# Hyphenated aliases for the underscore targets below (see DV_STANDARDS.md).
+coverage-summary: coverage_summary
+regress-cov: regress_cov
+regress-nl1: regress_nl1
+regress-all: regress_all
+docs-check: docs_check
+repo-status: repo_status
 
 # formal: SymbiYosys formal proofs in verification/formal/.
 #         Checks wr_ready/wr_full polarity and output stability (rd_valid,
@@ -235,5 +243,8 @@ help:
 	@echo "  make vivado             - Vivado hints"
 	@echo "  make clean              - Remove build artifacts"
 	@echo "  make help               - This message"
+	@echo ""
+	@echo "  Hyphenated aliases (see DV_STANDARDS.md): coverage-summary, regress-cov,"
+	@echo "  regress-nl1, regress-all, docs-check, repo-status"
 
 .DEFAULT_GOAL := all
