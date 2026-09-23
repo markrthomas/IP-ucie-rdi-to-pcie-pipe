@@ -1,0 +1,62 @@
+[*]
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Wed Sep 23 15:15:27 2026
+[*]
+[dumpfile] "/home/user/IP-ucie-rdi-to-pcie-pipe/obj_dir/dump.vcd"
+[dumpfile_mtime] "Wed Sep 23 15:15:18 2026"
+[dumpfile_size] 267993
+[savefile] "/home/user/IP-ucie-rdi-to-pcie-pipe/test/tb_ucie_rdi_to_pcie_pipe_bridge.gtkw"
+[timestart] 0
+[size] 1000 600
+[pos] -1 -1
+*-21.246962 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[sst_width] 276
+[signals_width] 342
+[sst_expanded] 1
+[sst_vpaned_height] 157
+@200
+--- Clock / Reset --
+@28
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_clk
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.pipe_clk
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rst_n
+@22
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_cycle[31:0]
+@200
+--- RDI TX request (RDI -> Bridge) --
+@22
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_valid[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_ready[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_data[63:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_error[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_flow_ctrl[3:0]
+@200
+--- PIPE TX response (Bridge -> PIPE) --
+@22
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.pipe_valid[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.pipe_ready[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.pipe_data[127:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.pipe_error[3:0]
+@200
+--- PIPE RX request (PIPE -> Bridge) --
+@22
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.pipe_rx_valid[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.pipe_rx_ready[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.pipe_rx_data[127:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.pipe_rx_error[3:0]
+@200
+--- RDI RX response (Bridge -> RDI) --
+@22
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_rx_valid[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_rx_ready[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_rx_data[63:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.rdi_rx_error[3:0]
+@200
+--- CRC (lane 0 model) --
+@23
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.crc_enable[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.crc_error[3:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.tb_crc_lane0[31:0]
+TOP.tb_ucie_rdi_to_pcie_pipe_bridge.CRC_RESIDUE[31:0]
+[pattern_trace] 1
+[pattern_trace] 0

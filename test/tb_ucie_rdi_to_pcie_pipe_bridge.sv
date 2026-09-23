@@ -16,6 +16,11 @@ module tb_ucie_rdi_to_pcie_pipe_bridge (
     localparam int PIPE_DATA_WIDTH = 32;
     localparam int BUFFER_DEPTH = 16;
 
+    // Test 11 (randomized transactions): beat count/timing.
+    localparam int RAND_NUM_BEATS    = 8;  // >= 5 required minimum
+    localparam int RAND_BEAT_PERIOD  = 4;  // cycles per beat slot
+    localparam int RAND_BEAT_HOLD    = 2;  // phase at which valid drops
+
     // Transmit path signals
     logic [NUM_LANES-1:0] rdi_valid, rdi_error, rdi_flow_ctrl;
     wire [NUM_LANES-1:0] rdi_ready;
@@ -174,7 +179,7 @@ module tb_ucie_rdi_to_pcie_pipe_bridge (
             pipe_rx_valid <= '0;
             pipe_rx_data <= '0;
             pipe_rx_error <= '0;
-        end else if (rdi_cycle == 32'd400) begin
+        end else if (rdi_cycle == 32'd430) begin
             sb.final_check();
             cdc_mon.print_statistics();
             $display("[TEST] Testbench complete");
@@ -294,6 +299,29 @@ module tb_ucie_rdi_to_pcie_pipe_bridge (
                         rdi_valid[0] <= 1'b0;
                     end else if (rdi_cycle == 32'd380) begin
                         crc_enable[0] <= 1'b0;
+                    end else if (rdi_cycle >= 32'd384 && rdi_cycle < 32'd384 + RAND_NUM_BEATS * RAND_BEAT_PERIOD) begin
+                        // Test 11: Randomized transactions. Each beat picks a
+                        // random nonzero lane mask, random per-lane data, and
+                        // a random error mask (limited to active lanes), held
+                        // for RAND_BEAT_HOLD cycles then dropped for the rest
+                        // of the period so the CDC stability monitor (which
+                        // only checks data while valid stays high across
+                        // consecutive cycles) never fires on the new value.
+                        automatic int unsigned rb_off   = rdi_cycle - 32'd384;
+                        automatic int unsigned rb_phase = rb_off % RAND_BEAT_PERIOD;
+                        if (rb_off == 0) begin
+                            $display("[TEST] Test 11: Randomized transactions (%0d beats)", RAND_NUM_BEATS);
+                        end
+                        if (rb_phase == 0) begin
+                            automatic logic [NUM_LANES-1:0] rb_valid = NUM_LANES'($urandom_range(1, (1 << NUM_LANES) - 1));
+                            automatic logic [NUM_LANES-1:0] rb_error = NUM_LANES'($urandom_range(0, (1 << NUM_LANES) - 1));
+                            rdi_valid <= rb_valid;
+                            rdi_data  <= {$urandom, $urandom};
+                            rdi_error <= rb_error & rb_valid;
+                        end else if (rb_phase == RAND_BEAT_HOLD) begin
+                            rdi_valid <= '0;
+                            rdi_error <= '0;
+                        end
                     end
                 end
             endcase

@@ -142,10 +142,18 @@ verilator_debug:
 	@echo "Running Verilator simulation..."
 	./$(VERILATOR_DIR)/$(TOP_MODULE)
 
-# View waveforms (GTKWave; VCD from sim_main.cpp)
-wave:
-	@echo "Opening GTKWave..."
-	gtkwave $(VERILATOR_DIR)/dump.vcd &
+# View waveforms (GTKWave; fresh VCD from the default Verilator smoke test,
+# opened with the curated signal-grouping layout).
+WAVE_GTKW = test/tb_ucie_rdi_to_pcie_pipe_bridge.gtkw
+
+wave: verilator
+	@if command -v gtkwave >/dev/null 2>&1; then \
+		echo "Opening GTKWave..."; \
+		gtkwave $(VERILATOR_DIR)/dump.vcd $(WAVE_GTKW) & \
+	else \
+		echo "[WAVE] gtkwave not found; install GTKWave to view $(VERILATOR_DIR)/dump.vcd (layout: $(WAVE_GTKW))"; \
+		exit 0; \
+	fi
 
 # VCS Simulation (requires Synopsys VCS)
 simv:
@@ -235,7 +243,8 @@ help:
 	@echo "  make verilator_nl1       - NUM_LANES=1 build/run only (after lint)"
 	@echo "  make verilator          - Compile and simulate with Verilator (default)"
 	@echo "  make verilator_debug    - Verilator with g++ -g -O0"
-	@echo "  make wave               - Open GTKWave on obj_dir/dump.vcd"
+	@echo "  make wave               - Run the default smoke test, then open the dump in GTKWave"
+	@echo "                            with the curated signal layout ($(WAVE_GTKW))"
 	@echo "  make lint               - Verilator -Wall (RTL + assertions + TB/scoreboard)"
 	@echo "  make simv               - VCS"
 	@echo "  make questa             - QuestaSim"
