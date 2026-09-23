@@ -44,6 +44,7 @@ Scenarios:
 5. Sustained multi-lane traffic  
 6. **FIFO stress** — Multi-lane push while **`pipe_ready = 0`** until **`rdi_flow_ctrl` / `rdi_ready`** show full-handling; then **`pipe_ready`** restored and FIFOs drain (scoreboard checks data/order).  
 7. **CRC lane 0** — **`crc_enable[0]`** with two pulsed beats; TB mirrors **`compute_crc32`** and checks **`crc_error[0]`** vs residue **`0x17047432`** on each **`negedge pipe_clk`** while CRC is enabled.
+8. **Randomized transactions** — 8 **`$urandom`**-driven beats (random nonzero lane mask, per-lane data, and error mask limited to active lanes), each held for `RAND_BEAT_HOLD` cycles then dropped; checked through the same scoreboard/CDC monitors as scenarios 1–7.
 
 Monitor module: `test/ucie_rdi_to_pcie_pipe_bridge_assertions.sv` — RDI data/error stability while valid, per-lane handshake statistics (`print_statistics()`).
 
@@ -82,7 +83,8 @@ The UVM environment is intentionally separated from the Verilator smoke regressi
 | Lint | Four passes: RTL top, assertions top, main TB top + files, **NUM_LANES=1** TB top + files (`-Wno-SYNCASYNCNET` on TB passes only). |
 | Scoreboard | Reference module compares PIPE accepts to RDI queue per lane; CI/regress fails on mismatch (`$fatal`). |
 | CI | **`sim`** → `make regress`; **`coverage`** (needs sim) → `make verilator_cov`; **`nl1`** (needs sim) → `make verilator_nl1`; optional **`coverage.info`** artifact. |
-| TB | Tests 6–7: FIFO fill under stalled PIPE + CRC mirror vs `crc_error`; simulation ends `rdi_cycle == 400`. |
+| TB | Tests 6–7: FIFO fill under stalled PIPE + CRC mirror vs `crc_error`. Test 8: 8-beat `$urandom` randomized-transaction default coverage; simulation ends `rdi_cycle == 430`. |
+| Waves | Curated GTKWave layout `test/tb_ucie_rdi_to_pcie_pipe_bridge.gtkw` (clock/reset, RDI TX, PIPE TX, PIPE RX, RDI RX, CRC groups); `make wave` runs the default smoke test and opens it automatically. |
 | Coverage | `make regress_cov` / `obj_dir_cov`; `sim_main.cpp` calls `VerilatedCov::write` when `VM_COVERAGE=1`. |
 
 ## Verilator coverage

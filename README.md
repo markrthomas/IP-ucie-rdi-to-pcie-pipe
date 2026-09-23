@@ -185,11 +185,12 @@ make verilator
 # Debug with detailed tracing
 make verilator_debug
 
-# View waveforms
+# View waveforms (runs the default smoke test, then opens GTKWave with the
+# curated signal layout, grouped by clock/reset, RDI TX, PIPE TX, PIPE RX, RDI RX, CRC)
 make wave
 ```
 
-Output: `obj_dir/dump.vcd` (GTKWave compatible)
+Output: `obj_dir/dump.vcd` (GTKWave compatible), opened with `test/tb_ucie_rdi_to_pcie_pipe_bridge.gtkw`
 
 If both `verilator` and `verilator_bin` are on your `PATH`, the Makefile prefers `verilator_bin` so the bundled wrapper can provide a consistent `VERILATOR_ROOT` and runtime support files.
 
@@ -274,8 +275,9 @@ The testbench (`tb_ucie_rdi_to_pcie_pipe_bridge.sv`) is a smoke suite with dual 
 5. **Sustained traffic** — repeated multi-lane bursts  
 6. **FIFO stress** — multi-lane push with PIPE stalled until RDI shows full; then drain (scoreboard)  
 7. **CRC lane 0** — `crc_enable[0]` with a TB mirror of the DUT CRC; continuous check vs `crc_error[0]` while enabled  
+8. **Randomized transactions** — 8 beats (`$urandom`-driven lane mask, data, and error) exercised through the same scoreboard/CDC checks as the directed scenarios above  
 
-Simulation ends at **`rdi_cycle == 400`** (Verilator `sim_main.cpp` time budget unchanged).
+Simulation ends at **`rdi_cycle == 430`** (Verilator `sim_main.cpp` time budget unchanged).
 
 The **assertion helper module** is instantiated in the testbench. It emits `$warning` on suspect RDI data/error changes while `rdi_valid` is held, and prints **per-lane transfer counts** at end of simulation via `print_statistics()`. It does not enforce PIPE data hold while valid (the bridge may refresh outputs when valid and not ready). Per-lane `Errors` in the stats count **cycles** with `*_error` asserted, not necessarily error beats—see `docs/verification_plan.md`.
 
