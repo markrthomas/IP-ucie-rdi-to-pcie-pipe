@@ -185,8 +185,9 @@ make verilator
 # Debug with detailed tracing
 make verilator_debug
 
-# View waveforms (runs the default smoke test, then opens GTKWave with the
-# curated signal layout, grouped by clock/reset, RDI TX, PIPE TX, PIPE RX, RDI RX, CRC)
+# View waveforms: runs the smoke test with a fresh random seed (Test 11 traffic;
+# SEED=<n> replays), then opens GTKWave with the curated signal layout, grouped by
+# clock/reset, RDI TX, PIPE TX, PIPE RX, RDI RX, CRC, zoomed to fit
 make wave
 ```
 

@@ -20,3 +20,6 @@ xsim_*.log
 
 # Built by `make -f test/uvm/Makefile.vcs pdf` (pandoc)
 test/uvm/UVM_README.pdf
+
+# make wave run log
+wave.log

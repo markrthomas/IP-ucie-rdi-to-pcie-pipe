@@ -85,7 +85,7 @@ verilator:
 		-I. -I$(VERILATOR_INC) -I$(VERILATOR_INC)/vltstd \
 		$(VERILATOR_CPP_CORE) -pthread -lm
 	@echo "Running Verilator simulation..."
-	./$(VERILATOR_DIR)/$(TOP_MODULE)
+	./$(VERILATOR_DIR)/$(TOP_MODULE) $(if $(SEED),+verilator+seed+$(SEED))
 
 # NUM_LANES=1 parameter sanity (obj_dir_nl1/, sim_main_nl1.cpp).
 verilator_nl1:
@@ -142,17 +142,25 @@ verilator_debug:
 	@echo "Running Verilator simulation..."
 	./$(VERILATOR_DIR)/$(TOP_MODULE)
 
-# View waveforms (GTKWave; fresh VCD from the default Verilator smoke test,
-# opened with the curated signal-grouping layout).
+# `make wave`: one random run end to end. Builds + runs the Verilator smoke TB
+# with a fresh random seed (+verilator+seed; it drives Test 11's $urandom
+# traffic), printed so SEED=<n> replays it; PASS/FAIL is read from the
+# scoreboard line; then GTKWave opens the VCD with the curated layout, zoomed
+# to fit (test/zoom_full.tcl). Waves open on a FAIL too. `make verilator` stays
+# unseeded (deterministic) unless SEED=<n> is given.
 WAVE_GTKW = test/tb_ucie_rdi_to_pcie_pipe_bridge.gtkw
+WAVE_SEED := $(or $(SEED),$(shell echo $$(( $$(od -An -N4 -tu4 /dev/urandom) % 2147483646 + 1 ))))
 
-wave: verilator
+wave:
+	@echo "[WAVE] smoke TB with random seed: SEED=$(WAVE_SEED)"
+	@$(MAKE) --no-print-directory verilator SEED=$(WAVE_SEED) | tee wave.log
+	@if grep -q "\[SCOREBOARD\] PASS" wave.log; then echo "[WAVE] PASS (SEED=$(WAVE_SEED))"; \
+	else echo "[WAVE] *** TEST FAILED (SEED=$(WAVE_SEED)) — opening waves for debug ***"; fi
 	@if command -v gtkwave >/dev/null 2>&1; then \
-		echo "Opening GTKWave..."; \
-		gtkwave $(VERILATOR_DIR)/dump.vcd $(WAVE_GTKW) & \
+		echo "[WAVE] opening $(VERILATOR_DIR)/dump.vcd with $(WAVE_GTKW)"; \
+		gtkwave -S test/zoom_full.tcl $(VERILATOR_DIR)/dump.vcd $(WAVE_GTKW) & \
 	else \
 		echo "[WAVE] gtkwave not found; install GTKWave to view $(VERILATOR_DIR)/dump.vcd (layout: $(WAVE_GTKW))"; \
-		exit 0; \
 	fi
 
 # VCS Simulation (requires Synopsys VCS)
@@ -219,7 +227,7 @@ clean:
 	rm -rf $(VERILATOR_DIR) $(COV_DIR) $(NL1_DIR)
 	rm -f coverage.info
 	rm -rf csrc simv simv.daidir DVEdir coverage.db *.vcd *.wdb *.fsdb
-	rm -rf xsim.dir transcript xsim_*.log
+	rm -rf xsim.dir transcript xsim_*.log wave.log
 	rm -rf work *.ucdb
 	@echo "Clean complete"
 
@@ -243,7 +251,7 @@ help:
 	@echo "  make verilator_nl1       - NUM_LANES=1 build/run only (after lint)"
 	@echo "  make verilator          - Compile and simulate with Verilator (default)"
 	@echo "  make verilator_debug    - Verilator with g++ -g -O0"
-	@echo "  make wave               - Run the default smoke test, then open the dump in GTKWave"
+	@echo "  make wave               - Smoke test w/ random seed (SEED=n replays), open dump in GTKWave"
 	@echo "                            with the curated signal layout ($(WAVE_GTKW))"
 	@echo "  make lint               - Verilator -Wall (RTL + assertions + TB/scoreboard)"
 	@echo "  make simv               - VCS"
