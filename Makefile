@@ -263,5 +263,11 @@ help:
 	@echo ""
 	@echo "  Hyphenated aliases (see DV_STANDARDS.md): coverage-summary, regress-cov,"
 	@echo "  regress-nl1, regress-all, docs-check, repo-status"
+	@echo "  make stress  # stress / randomized simulation (n/a stub if none)"
 
-.DEFAULT_GOAL := all
+.DEFAULT_GOAL := help
+
+# Standard DV target (DV_STANDARDS.md)
+.PHONY: stress
+stress:
+	@echo "[STRESS] n/a: no stress/randomized tier in this repo yet (see DV_STANDARDS.md)"
