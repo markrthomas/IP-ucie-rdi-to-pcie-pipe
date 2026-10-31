@@ -264,6 +264,9 @@ help:
 	@echo "  Hyphenated aliases (see DV_STANDARDS.md): coverage-summary, regress-cov,"
 	@echo "  regress-nl1, regress-all, docs-check, repo-status"
 	@echo "  make stress  # stress / randomized simulation (n/a stub if none)"
+	@echo "  swarm      Swarm A (verification) via Claude Code; swarm-rr = Swarm B (random regression); swarm-dry = show the command"
+	@echo "  batch      the Railway batch (docker/entrypoint.sh ci); board = swarm status; heavy T=<t> = one heavy target at a time"
+	@echo "  swarm-profile / swarm-kit-check   print .claude/swarm.env / check kit drift (shared kit: markrthomas/dv-swarm-kit)"
 
 .DEFAULT_GOAL := help
 
@@ -271,3 +274,6 @@ help:
 .PHONY: stress
 stress:
 	@echo "[STRESS] n/a: no stress/randomized tier in this repo yet (see DV_STANDARDS.md)"
+
+# shared swarm/infra targets (markrthomas/dv-swarm-kit)
+include swarm.mk
