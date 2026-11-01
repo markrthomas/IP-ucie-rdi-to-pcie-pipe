@@ -23,3 +23,5 @@ test/uvm/UVM_README.pdf
 
 # make wave run log
 wave.log
+/test/random/runs/
+/docker/last-run-metrics.json
